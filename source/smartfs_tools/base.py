@@ -28,6 +28,13 @@ class SectorSize(int, Enum):
     b16384 = 0b110
     b32768 = 0b111
 
+    @staticmethod
+    def cnv_to_size(value: "SectorSize") -> int:
+        """
+        Convert SectorSize to size in bytes
+        """
+        return 2 ** (value.value + 8)
+
 
 class Version(int, Enum):
     """
@@ -36,6 +43,15 @@ class Version(int, Enum):
     v1 = 0b01
     v2 = 0b10
     v3 = 0b11
+
+
+class CRCValue(Enum):
+    """
+    The valid values for the CRC value
+    """
+    crc_disable = "none"
+    crc8 = "crc8"
+    crc16 = "crc16"
 
 
 @dataclass
@@ -72,9 +88,10 @@ class SectorStatus:
 
 
 @dataclass
-class SectorHeader:
+class SectorHeaderV1:
     """
-    Sector header, size 5 bytes
+    Sector header, size 5 bytes, for SmartFS Version 1
+    Support only crc8
 
     uint8_t               logicalsector[2]; /* The logical sector number */
     uint8_t               seq;              /* Incrementing sequence number */
@@ -84,16 +101,37 @@ class SectorHeader:
     logical_sector_number: int
     sequence_number: int
     status: SectorStatus
-    crc8: Optional[int] = None
-    crc_enable: bool = False
+    crc_value: Optional[int] = None
+    crc: CRCValue = CRCValue.crc_disable
 
     def get_pack(self) -> bytes:
         """
         Return the packed byte representation of the sector header
         """
-        return struct.pack(
-            "<HBB",
-            self.logical_sector_number,
-            self.sequence_number & 0x00FF,
-            self.crc8 if self.crc_enable else self.sequence_number >> 8,
-        ) + self.status.get_pack()
+        if self.crc_value == CRCValue.crc_disable:
+            return struct.pack(
+                "<HBB",
+                self.logical_sector_number,
+                self.sequence_number & 0x00FF,
+                self.sequence_number >> 8,
+            ) + self.status.get_pack()
+
+        if self.crc_value == CRCValue.crc8:
+            return struct.pack(
+                "<HBB",
+                self.logical_sector_number,
+                self.sequence_number & 0x00FF,
+                self.crc_value,
+            ) + self.status.get_pack()
+
+        raise ValueError("CRC value is not supported")
+
+    @staticmethod
+    def get_len() -> int:
+        """
+        Return the length of the sector header
+        """
+        return 5
+
+
+Signature = b"SMRT"
