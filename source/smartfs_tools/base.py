@@ -6,6 +6,9 @@ from typing import Optional
 import crc
 
 
+Signature = b"SMRT"
+
+
 class SectorSize(int, Enum):
     """
     The valid values for the logical sector size
@@ -145,6 +148,7 @@ class SectorHeader:
         self._sh_size = sh_size
         self.status: SectorStatus
         self.crc_value: Optional[int] = None
+        self.crc: CRCValue = CRCValue.crc_disable
 
     @classmethod
     def create(
@@ -215,9 +219,6 @@ class SectorHeaderV1(SectorHeader):
             ) + self.status.get_pack()
 
         raise ValueError("CRC value is not supported")
-
-
-Signature = b"SMRT"
 
 
 class Sector:
@@ -294,9 +295,9 @@ class Sector:
         """
         calc = None
 
-        if self._header.crc_value == CRCValue.crc_disable:
+        if self._header.crc == CRCValue.crc_disable:
             return
-        if self._header.crc_value == CRCValue.crc8:
+        if self._header.crc == CRCValue.crc8:
             calc = crc.Calculator(crc.Crc8.CCITT)
 
         if calc is None:
