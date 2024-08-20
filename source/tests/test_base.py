@@ -38,3 +38,24 @@ class TestBase(unittest.TestCase):
         self.assertEqual(r.sector_size, base.SectorSize.b1024)
         # __ check revers value
         self.assertEqual(value_origin.to_bytes(), r.get_pack())
+
+    def test_sector(self):
+        r = base.Sector(
+            storage=bytearray(100),
+            is_new=True,
+            header=base.SectorHeader.create(
+                version=base.Version.v1,
+                logical_sector_number=0x10,
+                sequence_number=0x0a23,
+                crc=base.CRCValue.crc_disable,
+                status=base.SectorStatus(
+                    committed=base.Commited.committed,
+                    released=base.Released.not_released,
+                    crc_enable=0,
+                    sector_size=base.SectorSize.b256,
+                )
+            )
+        )
+
+        # test set bytes
+        r.set_bytes(0, b"check")

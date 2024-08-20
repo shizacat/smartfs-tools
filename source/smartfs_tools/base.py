@@ -266,13 +266,14 @@ class Sector:
         Args:
             pfrom - позиция считается после заголовка
         """
+        start_position = self._header.size + pfrom
         end_position = self._header.size + pfrom + len(value)
         if end_position > len(self._storage):
             raise ValueError(
                 f"The end position ({end_position}) is greater than the "
                 f"length of the buffer ({len(self._storage)})"
             )
-        self._storage[pfrom:end_position] = value
+        self._storage[start_position:end_position] = value
 
         self._header.crc_value = self._calc_crc()
         self._save_header()

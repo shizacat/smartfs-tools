@@ -9,6 +9,8 @@ from .base import (
     Signature,
     CRCValue,
     Sector,
+    Commited,
+    Released,
 )
 
 
@@ -159,8 +161,8 @@ class SmartVDevice:
                 sequence_number=sequence_number,
                 crc=self._crc,
                 status=SectorStatus(
-                    committed=1,
-                    released=0,
+                    committed=Commited.committed,
+                    released=Released.not_released,
                     crc_enable=0 if self._crc == CRCValue.crc_disable else 1,
                     sector_size=self._sector_size,
                     format_version=self._version,
