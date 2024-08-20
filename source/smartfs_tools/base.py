@@ -3,6 +3,8 @@ from enum import Enum
 from dataclasses import dataclass
 from typing import Optional
 
+import crc
+
 
 class SectorSize(int, Enum):
     """
@@ -54,6 +56,22 @@ class CRCValue(Enum):
     crc16 = "crc16"
 
 
+class Commited(Enum):
+    """
+    The valid values for the commited flag
+    """
+    not_committed = 1
+    committed = 0
+
+
+class Released(Enum):
+    """
+    The valid values for the released flag
+    """
+    not_released = 1
+    released = 0
+
+
 @dataclass
 class SectorStatus:
     """
@@ -67,8 +85,8 @@ class SectorStatus:
         * Bit 4-2: Sector size on volume
         * Bit 1-0: Format version (0x1)
     """
-    committed: int = 0
-    released: int = 0
+    committed: Commited = 0
+    released: Released = 0
     crc_enable: int = 0
     sector_size: SectorSize = SectorSize.b512
     format_version: Version = Version.v1
@@ -79,16 +97,78 @@ class SectorStatus:
         """
         return struct.pack(
             "B",
-            (self.committed << 7) |
-            (self.released << 6) |
+            (self.committed.value << 7) |
+            (self.released.value << 6) |
             (self.crc_enable << 5) |
             (self.sector_size.value << 2) |
             (self.format_version.value << 0)
         )
 
+    def __repr__(self):
+        return (
+            f"SectorStatus("
+            f"committed={self.committed}, "
+            f"released={self.released}, "
+            f"crc_enable={self.crc_enable}, "
+            f"sector_size={self.sector_size}, "
+            f"format_version={self.format_version}"
+            f")"
+        )
 
-@dataclass
-class SectorHeaderV1:
+    @staticmethod
+    def create_from_int(value: int) -> "SectorStatus":
+        """
+        Create a new instance of the sector status from the byte value
+        """
+        return SectorStatus(
+            committed=Commited((value >> 7) & 0x1),
+            released=Released((value >> 6) & 0x1),
+            crc_enable=(value >> 5) & 0x1,
+            sector_size=SectorSize((value >> 2) & 0x7),
+            format_version=Version((value >> 0) & 0x3),
+        )
+
+
+class SectorHeader:
+    """
+    Base class for sector header
+    """
+
+    def __init__(
+        self,
+        sh_size: int,
+    ):
+        """
+        Args:
+            sh_size: int - The size of the sector header in bytes
+        """
+        self._sh_size = sh_size
+        self.status: SectorStatus
+        self.crc_value: Optional[int] = None
+
+    @classmethod
+    def create(
+        cls, version: Version, *args, **kwargs
+    ) -> "SectorHeader":
+        """
+        Create a new instance of the sector header
+        """
+        if version == Version.v1:
+            return SectorHeaderV1(*args, **kwargs)
+        raise ValueError("Invalid version")
+
+    @property
+    def size(self) -> int:
+        """
+        Return the size of the sector header, bytes
+        """
+        return self._sh_size
+
+    def get_pack(self) -> bytes:
+        raise NotImplementedError()
+
+
+class SectorHeaderV1(SectorHeader):
     """
     Sector header, size 5 bytes, for SmartFS Version 1
     Support only crc8
@@ -98,17 +178,27 @@ class SectorHeaderV1:
     uint8_t               crc8;             /* CRC-8 or seq number MSB */
     uint8_t               status;           /* Status of this sector:
     """
-    logical_sector_number: int
-    sequence_number: int
-    status: SectorStatus
-    crc_value: Optional[int] = None
-    crc: CRCValue = CRCValue.crc_disable
+
+    def __init__(
+        self,
+        logical_sector_number: int,
+        sequence_number: int,
+        status: SectorStatus,
+        crc_value: Optional[int] = None,
+        crc: CRCValue = CRCValue.crc_disable
+    ):
+        super().__init__(sh_size=5)
+        self.logical_sector_number = logical_sector_number
+        self.sequence_number = sequence_number
+        self.status = status
+        self.crc_value = crc_value
+        self.crc = crc
 
     def get_pack(self) -> bytes:
         """
         Return the packed byte representation of the sector header
         """
-        if self.crc_value == CRCValue.crc_disable:
+        if self.crc == CRCValue.crc_disable:
             return struct.pack(
                 "<HBB",
                 self.logical_sector_number,
@@ -116,7 +206,7 @@ class SectorHeaderV1:
                 self.sequence_number >> 8,
             ) + self.status.get_pack()
 
-        if self.crc_value == CRCValue.crc8:
+        if self.crc == CRCValue.crc8:
             return struct.pack(
                 "<HBB",
                 self.logical_sector_number,
@@ -126,12 +216,104 @@ class SectorHeaderV1:
 
         raise ValueError("CRC value is not supported")
 
-    @staticmethod
-    def get_len() -> int:
-        """
-        Return the length of the sector header
-        """
-        return 5
-
 
 Signature = b"SMRT"
+
+
+class Sector:
+    """
+    Сектор
+    """
+
+    def __init__(
+        self,
+        storage: bytearray,
+        header: Optional[SectorHeader] = None,
+        is_new: bool = False,
+        fill_value: bytes = b'\xFF',
+    ):
+        """
+        Args:
+            is_new - будет заполнено новыми структурами
+                иначе будет вычитывать и парсить
+        """
+        self._storage = storage
+        self._fill_value = fill_value
+
+        if is_new:
+            if header is None:
+                raise ValueError("Header is required")
+            self._header = header
+            self._fill()
+            self._header.crc_value = self._calc_crc()
+            self._save_header()
+        else:
+            # TODO: read storage and parse header
+            raise NotImplementedError()
+
+    # def save(self):
+    #     """
+    #     Save the sector to the storage
+    #     """
+    #     # TODO: calculation crc
+
+    def set_bytes(self, pfrom: int, value: bytes):
+        """
+        Записывает в нужное место данные.
+        Сразу рассчитывается crc если это нужно
+
+        Args:
+            pfrom - позиция считается после заголовка
+        """
+        end_position = self._header.size + pfrom + len(value)
+        if end_position > len(self._storage):
+            raise ValueError(
+                f"The end position ({end_position}) is greater than the "
+                f"length of the buffer ({len(self._storage)})"
+            )
+        self._storage[pfrom:end_position] = value
+
+        self._header.crc_value = self._calc_crc()
+        self._save_header()
+
+    def _fill(self):
+        """
+        Заполняет пустое место в секторе
+        """
+        self._storage[self._header.size:] = self._fill_value * (
+            len(self._storage) - self._header.size
+        )
+
+    def _save_header(self):
+        self._storage[0:self._header.size] = self._header.get_pack()
+
+    def _calc_crc(self) -> int:
+        """
+        Return CRC value
+        TODO: lenght 8, 16, 32
+        """
+        calc = None
+
+        if self._header.crc_value == CRCValue.crc_disable:
+            return
+        if self._header.crc_value == CRCValue.crc8:
+            calc = crc.Calculator(crc.Crc8.CCITT)
+
+        if calc is None:
+            raise ValueError("CRC value is not supported")
+
+        # Calculation
+        buffer: bytes = b''
+        # __ Calculate CRC on data region of the sector
+        buffer += self._storage[self._header.size:]
+        # __ Add logical sector number and seq to the CRC calculation, 3 byte
+        buffer += self._header.get_pack()[:3]
+        # __ Add status to the CRC calculation, 1 byte
+        buffer += self._header.status.get_pack()
+        return calc.checksum(buffer)
+
+    def get_size(self) -> int:
+        """
+        Возвращает размер доступного места в секторе
+        """
+        return len(self._storage) - self._header.size

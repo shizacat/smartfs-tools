@@ -1,4 +1,5 @@
 import logging
+from typing import Optional
 
 from .base import (
     SectorSize,
@@ -6,7 +7,8 @@ from .base import (
     SectorHeader,
     SectorStatus,
     Signature,
-    CRCValue
+    CRCValue,
+    Sector,
 )
 
 
@@ -46,31 +48,41 @@ class SmartVDevice:
 
     def __init__(
         self,
+        device_size: Optional[int] = None,
         sector_size: SectorSize = SectorSize.b512,
         version: Version = Version.v1,
         crc: CRCValue = CRCValue.crc_disable,
-        fill_value: int = 0xFF,
+        fill_value: bytes = b'\xFF',
         max_len_filename: int = 16,
         number_root_dir: int = 10,
     ):
         """
         Args:
+            device_size: int - в байтах, если задан размер устройсва ограничен
+                его значением
             number_root_dir - Record the number of root directory entries
                 we have
         """
         self._sector_size = sector_size
+        self._sector_size_byte = SectorSize.cnv_to_size(self._sector_size)
         self._version = version
         self._crc = crc
         self._fill_value = fill_value
         self._max_len_filenaem = max_len_filename
         self._number_root_dir = number_root_dir
 
-        # Stored all data
+        # Device config
+        self._device_size = device_size
+        # __ Stored all data
         self._storage: bytearray = bytearray()
 
-        # runtime
+        # Runtime
         # __ Сколько секторов уже выделено
-        self._rt_sector_total = 0
+        self._phy_sectors_total: Optional[int] = None
+        # __ Максимальное количество секторов
+        self._phy_sector_max_number: Optional[int] = None
+        if self._device_size is not None:
+            self._phy_sector_max_number = self._device_size // self._sector_size_byte  # noqa: E501
 
         self._ll_format()
 
@@ -79,55 +91,79 @@ class SmartVDevice:
         Low level format
         """
         # Construct a logical sector zero header
-        sh = SectorHeader(
+        sector = self._phy_sector_get(
+            phy_sector_number=0,
             logical_sector_number=0,
             sequence_number=0,
-            crc=self._crc_enable,
-            status=SectorStatus(
-                committed=1,
-                released=0,
-                crc_enable=self._crc_enable,
-                sector_size=self._sector_size,
-                format_version=self._version,
-            )
         )
-        sector = self._create_sector(sh)
 
         # __ Add the format signature to the sector
-        self._ba_set_bytes(
-            sector, Signature, SectorHeader.get_len())
-        self._ba_set_bytes(
-            buffer=sector,
-            value=self._version.value.to_bytes(length=1, byteorder="big"),
-            start_position=SectorHeader.get_len() + len(Signature)
+        sector.set_bytes(pfrom=0, value=Signature)
+        # __ Add version
+        sector.set_bytes(
+            pfrom=len(Signature),
+            value=self._version.value.to_bytes(length=1, byteorder="big")
         )
-        self._ba_set_bytes(
-            buffer=sector,
+        # __ Add max length of file
+        sector.set_bytes(
+            pfrom=len(Signature) + 1,
             value=self._max_len_filenaem.to_bytes(length=1, byteorder="big"),
-            start_position=SectorHeader.get_len() + len(Signature) + 1
         )
-        self._ba_set_bytes(
-            buffer=sector,
+        # __ Add root directory entries
+        sector.set_bytes(
+            pfrom=len(Signature) + 2,
             value=self._number_root_dir.to_bytes(length=1, byteorder="big"),
-            start_position=SectorHeader.get_len() + len(Signature) + 2
         )
 
-    def _create_sector(self, sh: SectorHeader) -> bytearray:
+    def _phy_sector_get(
+        self,
+        phy_sector_number: int,
+        logical_sector_number: int = 0,
+        sequence_number: int = 0,
+    ) -> Sector:
         """
-        Создает сектор с заданным заголовком
+        Автоматически выделяет сектор из хранилища и возвращает
+        указатель на его часть
+        Не проверяет существование сектора, предпологается, что
+        сектора не существует
         """
-        # Создаем сектор
-        sector = bytearray(SectorSize.cnv_to_size(self._sector_size))
-        self._ba_set_bytes(sector, sh.get_pack(), 0)
-        return sector
-
-    def _ba_set_bytes(
-        self, buffer: bytearray, value: bytes, start_position: int
-    ):
-        end_position = start_position + len(value)
-        if end_position > len(buffer):
+        # checks
+        if (
+            self._device_size is not None and
+            phy_sector_number > self._phy_sector_max_number
+        ):
             raise ValueError(
-                f"The end position ({end_position}) is greater than the "
-                f"length of the buffer ({len(buffer)})"
+                f"The sector number ({phy_sector_number}) is greater than "
+                f"the number of sectors on the device / partition "
+                f"({self._phy_sector_max_number})"
             )
-        buffer[start_position:end_position] = value
+
+        # Get border
+        b_start = phy_sector_number * self._sector_size_byte
+        b_end = b_start + self._sector_size_byte
+        # Expand storage if necessary
+        if b_end > len(self._storage):
+            self._storage.extend(
+                bytearray(b_end - len(self._storage))
+            )
+
+        # TODO: может создавать в __init__
+        view = memoryview(self._storage)
+        return Sector(
+            is_new=True,
+            fill_value=self._fill_value,
+            storage=view[b_start:b_end],
+            header=SectorHeader.create(
+                version=self._version,
+                logical_sector_number=logical_sector_number,
+                sequence_number=sequence_number,
+                crc=self._crc,
+                status=SectorStatus(
+                    committed=1,
+                    released=0,
+                    crc_enable=0 if self._crc == CRCValue.crc_disable else 1,
+                    sector_size=self._sector_size,
+                    format_version=self._version,
+                )
+            )
+        )
