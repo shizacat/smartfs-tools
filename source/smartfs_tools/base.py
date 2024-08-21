@@ -147,7 +147,7 @@ class SectorHeader:
         """
         self._sh_size = sh_size
         self.status: SectorStatus
-        self.crc_value: Optional[int] = None
+        self.crc_value: int = 0
         self.crc: CRCValue = CRCValue.crc_disable
 
     @classmethod
@@ -188,7 +188,7 @@ class SectorHeaderV1(SectorHeader):
         logical_sector_number: int,
         sequence_number: int,
         status: SectorStatus,
-        crc_value: Optional[int] = None,
+        crc_value: int = 0,
         crc: CRCValue = CRCValue.crc_disable
     ):
         super().__init__(sh_size=5)
