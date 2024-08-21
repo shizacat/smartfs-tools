@@ -169,3 +169,8 @@ class SmartVDevice:
                 )
             )
         )
+
+    @property
+    def dump(self) -> bytes:
+        """Возвращает содержимое виртуального диска"""
+        return bytes(self._storage)
