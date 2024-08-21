@@ -1,3 +1,6 @@
 *.pyc
 source/check.py
 .coverage
+
+# Runtime
+test.bin
