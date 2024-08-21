@@ -46,6 +46,8 @@ class SmartVDevice:
     """
     Класс для работы с виртуальным устройством с файловой
     системой SmartFS.
+
+    Первые 3 сектора зарезервированы.
     """
 
     def __init__(
@@ -63,7 +65,7 @@ class SmartVDevice:
             device_size: int - в байтах, если задан размер устройсва ограничен
                 его значением
             number_root_dir - Record the number of root directory entries
-                we have
+                we have, if 1 - without multi directory
         """
         self._sector_size = sector_size
         self._sector_size_byte = SectorSize.cnv_to_size(self._sector_size)
@@ -169,6 +171,15 @@ class SmartVDevice:
                 )
             )
         )
+
+    def _write_fs_to_media(self):
+        """
+        Write the filesystem to media.
+        Loop for each root dir entry and allocate the reserved Root Dir Entry,
+        then write a blank root dir for it.
+        """
+        for i in range(self._number_root_dir):
+            pass
 
     @property
     def dump(self) -> bytes:
