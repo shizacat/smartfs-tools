@@ -1,12 +1,32 @@
 import struct
 from enum import Enum
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Dict, List
 
+from pydantic import BaseModel, Field
 import crc
 
 
+# Definition
+# ==========
+
+
 Signature = b"SMRT"
+
+# The logical sector number of the root directory.
+# SMARTFS_ROOT_DIR_SECTOR
+SCTN_ROOT_DIR_SECTOR: int = 3
+# First logical sector number we will use for assignment
+# of requested alloc sectors.
+# SMART_FIRST_ALLOC_SECTOR
+SCTN_FIRST_ALLOC_SECTOR: int = 12
+
+# Максимальный номер логического сектора, он же последний
+# он же зарезервирован
+LS_HIGHT_NUMBER: int = 0xffff
+
+# Физический сектор не выделен
+PS_NOT_ALLOCATED: int = 0xffff
 
 
 class SectorSize(int, Enum):
@@ -15,14 +35,6 @@ class SectorSize(int, Enum):
 
     The selected size is represented using 3 bits in the logical sector
     status byte and stored on each sector.
-
-    #define SMART_SECTSIZE_256        0x00
-    #define SMART_SECTSIZE_512        0x04
-    #define SMART_SECTSIZE_1024       0x08
-    #define SMART_SECTSIZE_2048       0x0c
-    #define SMART_SECTSIZE_4096       0x10
-    #define SMART_SECTSIZE_8192       0x14
-    #define SMART_SECTSIZE_16384      0x18
     """
     b256 = 0b000
     b512 = 0b001
@@ -43,7 +55,7 @@ class SectorSize(int, Enum):
 
 class Version(int, Enum):
     """
-    The valid values for the version
+    The valid values for the version SmartFS
     """
     v1 = 0b01
     v2 = 0b10
@@ -73,6 +85,15 @@ class Released(Enum):
     """
     not_released = 1
     released = 0
+
+
+class SectorType(Enum):
+    directory = 1
+    file = 2
+
+
+# Models
+# ======
 
 
 @dataclass
@@ -221,6 +242,29 @@ class SectorHeaderV1(SectorHeader):
         raise ValueError("CRC value is not supported")
 
 
+class ChainHeader(BaseModel):
+    """
+    Chain header, CH, 5 bytes
+    If next_sector == EraseState (0xff) then it last sector in the chain
+    """
+    sector_type: SectorType = Field(
+        ..., description="Type of sector entry (file or dir) ")
+    next_sector: int = Field(
+        ..., description="Next logical sector in the chain")
+    used: int = Field(..., description="Number of bytes used in this sector")
+
+    def get_pack(self) -> bytes:
+        """
+        Return the packed byte representation
+        """
+        return struct.pack(
+            "<BHH",
+            self.sector_type.value,
+            self.next_sector,
+            self.used,
+        )
+
+
 class Sector:
     """
     Сектор
@@ -282,6 +326,7 @@ class Sector:
         """
         Заполняет пустое место в секторе
         """
+        self._storage[0:1] = b'a'
         self._storage[self._header.size:] = self._fill_value * (
             len(self._storage) - self._header.size
         )
@@ -319,3 +364,71 @@ class Sector:
         Возвращает размер доступного места в секторе
         """
         return len(self._storage) - self._header.size
+
+
+class SmartFSConfig(BaseModel):
+    """
+    Настройки виртуального устрояйства со SmartFS
+    """
+    sector_size: SectorSize = Field(
+        SectorSize.b512, description="Размер сектрота")
+    version: Version = Field(Version.v1, description="Версия SmartFS")
+    crc: CRCValue = Field(
+        CRCValue.crc_disable, description="CRC alhorithm, or disable")
+    max_len_filename: int = Field(
+        16, description="Максимальная длинна имени файла")
+    number_root_dir: int = Field(
+        1,
+        description=(
+            "Количество корневых директорий, "
+            "if 1 - without multi directory"
+        )
+    )
+
+
+class SmartStruct(BaseModel):
+    """
+    Расчетные данные для работы SmartFS
+
+    uint16_t              neraseblocks;     /* Number of erase blocks or sub-sectors */
+    uint16_t              lastallocblock;   /* Last  block we allocated a sector from */
+    uint16_t              freesectors;      /* Total number of free sectors */
+    uint16_t              releasesectors;   /* Total number of released sectors */
+    uint16_t              mtdblkspersector; /* Number of MTD blocks per SMART Sector */
+    uint16_t              sectorsperblk;    /* Number of sectors per erase block */
+    uint16_t              sectorsize;       /* Sector size on device */
+    uint16_t              totalsectors;     /* Total number of sectors on device */
+    uint32_t              erasesize;        /* Size of an erase block */
+    FAR uint8_t          *releasecount;     /* Count of released sectors per erase block */
+    FAR uint8_t          *freecount;        /* Count of free sectors per erase block */
+    FAR char             *rwbuffer;         /* Our sector read/write buffer */
+    char                  partname[SMART_PARTNAME_SIZE];
+    uint8_t               formatversion;    /* Format version on the device */
+    uint8_t               formatstatus;     /* Indicates the status of the device format */
+    uint8_t               namesize;         /* Length of filenames on this device */
+    uint8_t               debuglevel;       /* Debug reporting level */
+    uint8_t               availsectperblk;  /* Number of usable sectors per erase block */
+    FAR uint16_t         *smap;             /* Virtual to physical sector map */
+    """
+    neraseblocks: int = Field(
+        ..., description="Number of erase blocks or sub-sectors")
+    sectorsperblk: int = Field(
+        ..., description="Number of sectors per erase block")
+    availsectperblk: int = Field(
+        ..., description="Number of usable sectors per erase block")
+    totalsectors: int = Field(
+        ..., description="Total number of sectors on device")
+    # -----------------
+    # Change in runtime
+    # -----------------
+    freesectors: int = Field(
+        0, description="Total number of free sectors")
+    # PS_NOT_ALLOCATED - is empty logical sector.
+    smap: Dict[int, int] = Field(
+        default_factory=dict, description="Logical to physical sector map")
+    lastallocblock: int = Field(
+        0, description="Last block (erase block) we allocated a sector from")
+    # eb:sector -> 0 - allocated; 1 - free
+    free_sector_map: List[List[bool]] = Field(
+        default_factory=list,
+        description="Count of free sectors per erase block")

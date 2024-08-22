@@ -59,3 +59,11 @@ class TestBase(unittest.TestCase):
 
         # test set bytes
         r.set_bytes(0, b"check")
+
+    def test_chain_sector(self):
+        r = base.ChainHeader(
+            sector_type=base.SectorType.file,
+            next_sector=0xffff,
+            used=2,
+        )
+        self.assertEqual(r.get_pack(), b'\x02\xff\xff\x02\x00')

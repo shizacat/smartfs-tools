@@ -11,74 +11,51 @@ from .base import (
     Sector,
     Commited,
     Released,
+    SCTN_ROOT_DIR_SECTOR,
+    ChainHeader,
+    SectorType,
 )
+from smartfs_tools import base
 
 
-# def make_dump(
-#     size: int,
-#     ls_size: LSSize = LSSize.b512,
-# ) -> bytes:
-#     """
-#     Создает пустай дамп с отформатированной файловой системой
-#     заданного размера.
-
-#     Так как сама файловая система используется на носителях
-#     небольшого размера, весь дамп создается в памяти.
-
-#     Args
-#         size: int - Размер в байтах, образа файловой системы
-#         ls_size: LSSize - Logical sector size in bytes
-#     """
-#     # Definitions
-#     ls_total = size // ls_size.value
-
-#     # Checks
-#     # The total number of sectors on the device / partition
-#     # fits in a 16-bit word.
-#     if ls_total > 0xFFFF:
-#         raise ValueError(
-#             f"The total number of sectors on the device / partition "
-#             f"({ls_total}) does not fit in a 16-bit word."
-#         )
-
-
-class SmartVDevice:
+class MTDBlockLayer:
     """
     Класс для работы с виртуальным устройством с файловой
     системой SmartFS.
 
-    Первые 3 сектора зарезервированы.
+    This layer manages all low-level FLASH access operations
+    including:
+        - sector allocations,
+        - logical to physical sector mapping,
+        - erase operations,
+        - etc ...
     """
 
     def __init__(
         self,
-        device_size: Optional[int] = None,
-        sector_size: SectorSize = SectorSize.b512,
-        version: Version = Version.v1,
-        crc: CRCValue = CRCValue.crc_disable,
+        erase_block_size: int,
+        storage: bytearray,
         fill_value: bytes = b'\xFF',
-        max_len_filename: int = 16,
-        number_root_dir: int = 10,
+        smartfs_config: base.SmartFSConfig = base.SmartFSConfig(),
+        formated: bool = False,
     ):
         """
         Args:
-            device_size: int - в байтах, если задан размер устройсва ограничен
-                его значением
+            device_size: int - в байтах, размер устройсва
+            erase_block_size - в байтах, размер erase block,
+                esp32s3 spi flash - 4096
             number_root_dir - Record the number of root directory entries
                 we have, if 1 - without multi directory
         """
-        self._sector_size = sector_size
-        self._sector_size_byte = SectorSize.cnv_to_size(self._sector_size)
-        self._version = version
-        self._crc = crc
+        self._storage: bytearray = storage
+        self._erase_block_size = erase_block_size
         self._fill_value = fill_value
-        self._max_len_filenaem = max_len_filename
-        self._number_root_dir = number_root_dir
+        self._smartfs_config = smartfs_config
 
-        # Device config
-        self._device_size = device_size
-        # __ Stored all data
-        self._storage: bytearray = bytearray()
+        # Calculation
+        self._sector_size_byte = SectorSize.cnv_to_size(
+            self._smartfs_config.sector_size)
+        self._device_size = len(self._storage)
 
         # Runtime
         # __ Сколько секторов уже выделено
@@ -87,37 +64,191 @@ class SmartVDevice:
         self._phy_sector_max_number: Optional[int] = None
         if self._device_size is not None:
             self._phy_sector_max_number = self._device_size // self._sector_size_byte  # noqa: E501
+        # __ Карта выделенных секторов
+        self._sector_allocated_map = {}
 
-        self._ll_format()
+        self._initialize()
 
-    def _ll_format(self):
+        if formated:
+            # Fill default
+            self._storage[:] = self._fill_value * self._device_size
+            self._llformat()
+            self._fs_media_write()
+        else:
+            pass
+            # TODO: scan device
+
+    def _initialize(self):
+        """
+        name: smart_initialize
+        """
+        neraseblocks = self._device_size // self._erase_block_size
+        sectorsperblk = self._erase_block_size // self._sector_size_byte
+        totalsectors = neraseblocks * sectorsperblk
+
+        self._smart_struct = base.SmartStruct(
+            neraseblocks=neraseblocks,
+            sectorsperblk=sectorsperblk,
+            availsectperblk=sectorsperblk,
+            totalsectors=totalsectors,
+            # Runtime
+            freesectors=totalsectors,
+            smap={x: base.PS_NOT_ALLOCATED for x in range(totalsectors)},
+            lastallocblock=0,
+            free_sector_map=[[1] * sectorsperblk] * neraseblocks,
+        )
+
+        # Total number of sectors on device
+        if self._smart_struct.totalsectors > 65536:
+            raise ValueError(
+                f"Invalid SMART sector count {self._smart_struct.totalsectors}"
+            )
+        if self._smart_struct.totalsectors == 65536:
+            # Special case.  We allow 65536 sectors and simply waste 2 sectors
+            # to allow a smaller sector size with almost maximum flash usage.
+            self._smart_struct.totalsectors -= 2
+
+    def _llformat(self):
         """
         Low level format
+        name: _smart_llformat
+
+        - Add 'Format header' (FH)
         """
         # Construct a logical sector zero header
+        # SH
+        self._allocsector(requested=0, physical_sector=0)
+
         sector = self._phy_sector_get(
             phy_sector_number=0,
             logical_sector_number=0,
             sequence_number=0,
         )
 
+        # FH
         # __ Add the format signature to the sector
         sector.set_bytes(pfrom=0, value=Signature)
         # __ Add version
         sector.set_bytes(
             pfrom=len(Signature),
-            value=self._version.value.to_bytes(length=1, byteorder="big")
+            value=self._smartfs_config.version.value.to_bytes(
+                length=1, byteorder="big"
+            )
         )
         # __ Add max length of file
         sector.set_bytes(
             pfrom=len(Signature) + 1,
-            value=self._max_len_filenaem.to_bytes(length=1, byteorder="big"),
+            value=self._smartfs_config.max_len_filename.to_bytes(
+                length=1, byteorder="big"
+            ),
         )
         # __ Add root directory entries
         sector.set_bytes(
             pfrom=len(Signature) + 2,
-            value=self._number_root_dir.to_bytes(length=1, byteorder="big"),
+            value=self._smartfs_config.number_root_dir.to_bytes(
+                length=1, byteorder="big"
+            ),
         )
+
+    def _allocsector(
+        self,
+        requested: int = base.LS_HIGHT_NUMBER,
+        physical_sector: Optional[int] = None,
+    ) -> int:
+        """
+        Allocates a new logical sector. If an argument is given,
+        then it tries to allocate the specified sector number.
+        name: smart_allocsector
+
+        Return
+            logical sector number
+        """
+        logsector = base.LS_HIGHT_NUMBER
+        # physicalsector
+
+        # Validate that we have enough sectors available to perform
+        # an allocation.
+        if self._smart_struct.freesectors < self._smart_struct.sectorsperblk + 4:  # noqa: E501
+            raise ValueError("Not enough free sectors")
+
+        # Check logical sector is free
+        if requested > 0 and requested < self._smart_struct.totalsectors:
+            if self._smart_struct.smap.get[requested] != base.PS_NOT_ALLOCATED:
+                raise ValueError(f"Sector {requested} is already allocated")
+            logsector = requested
+
+        # Check if we need to scan for an available logical sector
+        if requested == base.LS_HIGHT_NUMBER:
+            for x in range(
+                base.SCTN_FIRST_ALLOC_SECTOR, self._smart_struct.totalsectors
+            ):
+                if self._smart_struct.smap[x] == base.PS_NOT_ALLOCATED:
+                    logsector = x
+                    break
+
+        # Test for an error allocating a sector
+        if logsector == base.LS_HIGHT_NUMBER:
+            raise ValueError("No available logical sector")
+
+        # Find a free physical sector
+        if physical_sector is None:
+            physicalsector = self._findfreephyssector()
+
+        if physicalsector == base.PS_NOT_ALLOCATED:
+            raise ValueError("No available physical sector")
+
+        # Write the logical sector to the flash.
+        # We will fill it in with data late.
+        smart_write_alloc_sector
+        # write only header (FS)
+
+        # Update struct
+        self._smart_struct.smap[logsector] = physicalsector
+        self._smart_struct.freesectors -= 1
+
+        return logsector
+
+    def _findfreephyssector(self) -> int:
+        """
+        Find free physical sector
+        """
+        physical_sector = base.PS_NOT_ALLOCATED
+
+        # Reset counter
+        self._smart_struct.lastallocblock += 1
+        if (
+            self._smart_struct.lastallocblock >=
+            self._smart_struct.neraseblocks
+        ):
+            self._smart_struct.lastallocblock = 0
+
+        block = self._smart_struct.lastallocblock
+        for eb, sectors in enumerate(range(self._smart_struct.free_sector_map)):
+            block_count_free_sector = sum(
+                self._smart_struct.free_sector_map[block])
+            # Block have all free secotors
+            if block_count_free_sector == self._smart_struct.sectorsperblk:
+                break
+            # Not free sectors
+            if sum(sectors) == 0:
+                continue
+            if sum(sectors) > block_count_free_sector:
+                block = eb
+
+        if sum(self._smart_struct.free_sector_map[block]) == 0:
+            raise ValueError("No available physical sector")
+
+        for i, sector in enumerate(self._smart_struct.free_sector_map[block]):
+            if sector == 1:
+                physical_sector = block * self._smart_struct.sectorsperblk + i
+                self._smart_struct.free_sector_map[block][i] = 0
+                self._smart_struct.lastallocblock = block
+                break
+
+        # Now check on the physical media
+        # TODO
+
+        return physical_sector
 
     def _phy_sector_get(
         self,
@@ -158,28 +289,45 @@ class SmartVDevice:
             fill_value=self._fill_value,
             storage=view[b_start:b_end],
             header=SectorHeader.create(
-                version=self._version,
+                version=self._smartfs_config.version,
                 logical_sector_number=logical_sector_number,
                 sequence_number=sequence_number,
-                crc=self._crc,
+                crc=self._smartfs_config.crc,
                 status=SectorStatus(
                     committed=Commited.committed,
                     released=Released.not_released,
-                    crc_enable=0 if self._crc == CRCValue.crc_disable else 1,
-                    sector_size=self._sector_size,
-                    format_version=self._version,
+                    crc_enable=0 if self._smartfs_config.crc == CRCValue.crc_disable else 1,  # noqa: E501
+                    sector_size=self._smartfs_config.sector_size,
+                    format_version=self._smartfs_config.version,
                 )
             )
         )
 
-    def _write_fs_to_media(self):
+    def _fs_media_write(self):
         """
         Write the filesystem to media.
         Loop for each root dir entry and allocate the reserved Root Dir Entry,
         then write a blank root dir for it.
+
+        'Chain Header' (CH)
         """
-        for i in range(self._number_root_dir):
-            pass
+        sector_number = SCTN_ROOT_DIR_SECTOR
+        for i in range(self._smartfs_config.number_root_dir):
+            # TODO: wrong get sector
+            sector = self._phy_sector_get(
+                phy_sector_number=sector_number,
+                logical_sector_number=sector_number,
+                sequence_number=0,
+            )
+            ch = ChainHeader(
+                sector_type=SectorType.directory,
+                next_sector=0xffff,
+                used=0xffff,
+            )
+            sector.set_bytes(pfrom=0, value=ch.get_pack())
+
+            # set next dir sector
+            sector_number += 1
 
     @property
     def dump(self) -> bytes:
