@@ -4,7 +4,7 @@ from smartfs_tools import base
 
 
 class TestBase(unittest.TestCase):
-    def test_SectorHeader(self):
+    def test_SectorHeader_create(self):
         """
         Encode
         """
@@ -23,6 +23,13 @@ class TestBase(unittest.TestCase):
         ).get_pack()
         self.assertEqual(obj[:4], b'\x10\x00\x23\x0a')
         self.assertEqual(obj[4], 0b01000101)
+
+    def test_SectorHeader_create_from_raw(self):
+        h = base.SectorHeader.create_from_raw(b'\x10\x00\x23\x0a\x45')
+        self.assertIsInstance(h, base.SectorHeaderV1)
+        self.assertEqual(h.crc, base.CRCValue.crc_disable)
+        self.assertEqual(h.logical_sector_number, 0x10)
+        self.assertEqual(h.sequence_number, 0x0a23)
 
     def test_status(self):
         value_origin = 0b01001001

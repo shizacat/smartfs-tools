@@ -167,6 +167,8 @@ class SectorHeader:
             sh_size: int - The size of the sector header in bytes
         """
         self._sh_size = sh_size
+        self.logical_sector_number: int
+        self.sequence_number: int
         self.status: SectorStatus
         self.crc_value: int = 0
         self.crc: CRCValue = CRCValue.crc_disable
@@ -180,6 +182,19 @@ class SectorHeader:
         """
         if version == Version.v1:
             return SectorHeaderV1(*args, **kwargs)
+        raise ValueError("Invalid version")
+
+    @classmethod
+    def create_from_raw(cls, value: bytes) -> "SectorHeader":
+        """
+        Создает заголовок из строки байтов
+        """
+        if len(value) != 5:
+            raise ValueError("Invalid sector header size")
+        status = SectorStatus.create_from_int(int(value[4]))
+        if status.format_version == Version.v1:
+            return SectorHeaderV1.create_from_bytes(
+                value=value, status=status)
         raise ValueError("Invalid version")
 
     @property
@@ -241,6 +256,32 @@ class SectorHeaderV1(SectorHeader):
 
         raise ValueError("CRC value is not supported")
 
+    @classmethod
+    def create_from_bytes(
+        cls, value: bytes, status: Optional[SectorStatus]
+    ) -> "SectorHeaderV1":
+        if status is None:
+            status = SectorStatus.create_from_int(value[4])
+
+        seq_number = int(value[2])
+
+        crc_value = 0
+        crc = CRCValue.crc_disable
+        if status.crc_enable == 1:
+            crc_value = int(value[3])
+            crc = CRCValue.crc8
+        else:
+            seq_number += (int(value[3]) << 8)
+
+        status.crc_enable
+        return SectorHeaderV1(
+            logical_sector_number=int.from_bytes(value[0:2], "little"),
+            sequence_number=seq_number,
+            status=status,
+            crc_value=crc_value,
+            crc=crc,
+        )
+
 
 class ChainHeader(BaseModel):
     """
@@ -293,8 +334,7 @@ class Sector:
             self._header.crc_value = self._calc_crc()
             self._save_header()
         else:
-            # TODO: read storage and parse header
-            raise NotImplementedError()
+            self._header = SectorHeader.create_from_raw(self._storage[0:5])
 
     # def save(self):
     #     """

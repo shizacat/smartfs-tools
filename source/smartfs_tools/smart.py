@@ -57,16 +57,6 @@ class MTDBlockLayer:
             self._smartfs_config.sector_size)
         self._device_size = len(self._storage)
 
-        # Runtime
-        # __ Сколько секторов уже выделено
-        self._phy_sectors_total: Optional[int] = None
-        # __ Максимальное количество секторов
-        self._phy_sector_max_number: Optional[int] = None
-        if self._device_size is not None:
-            self._phy_sector_max_number = self._device_size // self._sector_size_byte  # noqa: E501
-        # __ Карта выделенных секторов
-        self._sector_allocated_map = {}
-
         self._initialize()
 
         if formated:
@@ -115,15 +105,11 @@ class MTDBlockLayer:
 
         - Add 'Format header' (FH)
         """
-        # Construct a logical sector zero header
+        # Construct a logical sector zero
         # SH
         self._allocsector(requested=0, physical_sector=0)
 
-        sector = self._phy_sector_get(
-            phy_sector_number=0,
-            logical_sector_number=0,
-            sequence_number=0,
-        )
+        sector = self._phy_sector_get(phy_sector_number=0)
 
         # FH
         # __ Add the format signature to the sector
@@ -132,21 +118,21 @@ class MTDBlockLayer:
         sector.set_bytes(
             pfrom=len(Signature),
             value=self._smartfs_config.version.value.to_bytes(
-                length=1, byteorder="big"
+                length=1, byteorder="little"
             )
         )
         # __ Add max length of file
         sector.set_bytes(
             pfrom=len(Signature) + 1,
             value=self._smartfs_config.max_len_filename.to_bytes(
-                length=1, byteorder="big"
+                length=1, byteorder="little"
             ),
         )
         # __ Add root directory entries
         sector.set_bytes(
             pfrom=len(Signature) + 2,
             value=self._smartfs_config.number_root_dir.to_bytes(
-                length=1, byteorder="big"
+                length=1, byteorder="little"
             ),
         )
 
@@ -172,8 +158,8 @@ class MTDBlockLayer:
             raise ValueError("Not enough free sectors")
 
         # Check logical sector is free
-        if requested > 0 and requested < self._smart_struct.totalsectors:
-            if self._smart_struct.smap.get[requested] != base.PS_NOT_ALLOCATED:
+        if requested >= 0 and requested < self._smart_struct.totalsectors:
+            if self._smart_struct.smap.get(requested) != base.PS_NOT_ALLOCATED:
                 raise ValueError(f"Sector {requested} is already allocated")
             logsector = requested
 
@@ -192,18 +178,21 @@ class MTDBlockLayer:
 
         # Find a free physical sector
         if physical_sector is None:
-            physicalsector = self._findfreephyssector()
+            physical_sector = self._findfreephyssector()
 
-        if physicalsector == base.PS_NOT_ALLOCATED:
+        if physical_sector == base.PS_NOT_ALLOCATED:
             raise ValueError("No available physical sector")
 
         # Write the logical sector to the flash.
         # We will fill it in with data late.
-        smart_write_alloc_sector
-        # write only header (FS)
+        # write only header (FS), analog: smart_write_alloc_sector
+        self._phy_sector_create(
+            phy_sector_number=physical_sector,
+            logical_sector_number=logsector,
+            sequence_number=0)
 
         # Update struct
-        self._smart_struct.smap[logsector] = physicalsector
+        self._smart_struct.smap[logsector] = physical_sector
         self._smart_struct.freesectors -= 1
 
         return logsector
@@ -223,7 +212,7 @@ class MTDBlockLayer:
             self._smart_struct.lastallocblock = 0
 
         block = self._smart_struct.lastallocblock
-        for eb, sectors in enumerate(range(self._smart_struct.free_sector_map)):
+        for eb, sectors in enumerate(self._smart_struct.free_sector_map):
             block_count_free_sector = sum(
                 self._smart_struct.free_sector_map[block])
             # Block have all free secotors
@@ -250,37 +239,21 @@ class MTDBlockLayer:
 
         return physical_sector
 
-    def _phy_sector_get(
+    def _phy_sector_create(
         self,
         phy_sector_number: int,
         logical_sector_number: int = 0,
         sequence_number: int = 0,
     ) -> Sector:
         """
-        Автоматически выделяет сектор из хранилища и возвращает
-        указатель на его часть
-        Не проверяет существование сектора, предпологается, что
-        сектора не существует
-        """
-        # checks
-        if (
-            self._device_size is not None and
-            phy_sector_number > self._phy_sector_max_number
-        ):
-            raise ValueError(
-                f"The sector number ({phy_sector_number}) is greater than "
-                f"the number of sectors on the device / partition "
-                f"({self._phy_sector_max_number})"
-            )
+        Создает новый физический сектор.
+          - Записывает Sector Header в сектор
 
+        Не проверяет существование старого
+        """
         # Get border
         b_start = phy_sector_number * self._sector_size_byte
         b_end = b_start + self._sector_size_byte
-        # Expand storage if necessary
-        if b_end > len(self._storage):
-            self._storage.extend(
-                bytearray(b_end - len(self._storage))
-            )
 
         # TODO: может создавать в __init__
         view = memoryview(self._storage)
@@ -303,6 +276,31 @@ class MTDBlockLayer:
             )
         )
 
+    def _phy_sector_get(self, phy_sector_number: int) -> Sector:
+        """
+        Только получает, читает сектор
+        """
+        # Checks
+        if (
+            phy_sector_number > 65535 or
+            phy_sector_number == base.PS_NOT_ALLOCATED
+        ):
+            raise ValueError("Invalid physical sector number")
+
+        # Get border
+        b_start = phy_sector_number * self._sector_size_byte
+        b_end = b_start + self._sector_size_byte
+
+        # TODO: может создавать в __init__
+        view = memoryview(self._storage)
+        return Sector(is_new=False, storage=view[b_start:b_end])
+
+    def _log_sector_get(self, log_sector: int) -> Sector:
+        """
+        Возвращает физический сектор соответсвующий логическому
+        """
+        return self._phy_sector_get(self._smart_struct.smap[log_sector])
+
     def _fs_media_write(self):
         """
         Write the filesystem to media.
@@ -313,12 +311,8 @@ class MTDBlockLayer:
         """
         sector_number = SCTN_ROOT_DIR_SECTOR
         for i in range(self._smartfs_config.number_root_dir):
-            # TODO: wrong get sector
-            sector = self._phy_sector_get(
-                phy_sector_number=sector_number,
-                logical_sector_number=sector_number,
-                sequence_number=0,
-            )
+            self._allocsector(requested=sector_number)
+            sector = self._log_sector_get(sector_number)
             ch = ChainHeader(
                 sector_type=SectorType.directory,
                 next_sector=0xffff,
