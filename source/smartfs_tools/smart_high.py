@@ -149,6 +149,7 @@ class SmartHigh:
                         dir_offset=dir_offset,
                         name=eh.name
                     )
+                    is_found = True
                     break
                 dir_offset += 1
 
@@ -231,6 +232,7 @@ class SmartHigh:
         entry.name = name
         entry.first_sector = sector_new_number
         entry.utc = datetime.datetime.now(datetime.UTC)
+        entry.flags.empty = 0  # not empty
 
         # Write entry on sector
         sector.set_bytes(

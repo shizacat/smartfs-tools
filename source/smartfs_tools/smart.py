@@ -310,7 +310,7 @@ class MTDBlockLayer:
         'Chain Header' (CH)
         """
         sector_number = SCTN_ROOT_DIR_SECTOR
-        for i in range(self._smartfs_config.number_root_dir):
+        for i in range(self._smartfs_config.number_root_dir + 1):
             self._allocsector(requested=sector_number)
             sector = self._log_sector_get(sector_number)
             ch = ChainHeader(

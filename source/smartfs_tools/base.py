@@ -473,10 +473,10 @@ class SmartFSConfig(BaseModel):
     max_len_filename: int = Field(
         16, description="Максимальная длинна имени файла")
     number_root_dir: int = Field(
-        1,
+        0,
         description=(
             "Количество корневых директорий, "
-            "if 1 - without multi directory"
+            "if 0 - only one root directory"
         )
     )
 
