@@ -1,4 +1,5 @@
 import struct
+import datetime
 from enum import Enum
 from dataclasses import dataclass
 from typing import Optional, Dict, List
@@ -305,6 +306,23 @@ class ChainHeader(BaseModel):
             self.used,
         )
 
+    @classmethod
+    def get_size(cls) -> int:
+        return 5
+
+    @classmethod
+    def create_from_raw(cls, value: bytes) -> "ChainHeader":
+        """
+        Создает заголовок из строки байтов
+        """
+        if len(value) != cls.get_size():
+            raise ValueError("Invalid chain header size")
+        return ChainHeader(
+            sector_type=SectorType(value[0]),
+            next_sector=int.from_bytes(value[1:3], "little"),
+            used=int.from_bytes(value[3:5], "little"),
+        )
+
 
 class Sector:
     """
@@ -335,12 +353,6 @@ class Sector:
             self._save_header()
         else:
             self._header = SectorHeader.create_from_raw(self._storage[0:5])
-
-    # def save(self):
-    #     """
-    #     Save the sector to the storage
-    #     """
-    #     # TODO: calculation crc
 
     def set_bytes(self, pfrom: int, value: bytes):
         """
@@ -404,6 +416,49 @@ class Sector:
         Возвращает размер доступного места в секторе
         """
         return len(self._storage) - self._header.size
+
+    def read_object(self, class_name, offset: int = 0, size: int = 0):
+        """
+        Читает объект по заданному адрсу
+
+        Args:
+            offset, смещенеи относительно SH
+        """
+        b_start = self._header.size + offset
+        b_end = b_start + size
+        if b_end > len(self._storage):
+            raise ValueError(
+                f"The end position ({b_end}) is greater than the "
+                f"size of the sector ({len(self._storage)})"
+            )
+        return class_name.create_from_raw(self._storage[b_start:b_end])
+
+    def borders_is_big(self, offset: int, size: int) -> bool:
+        """
+        Проверяет, что начало и конец данных не выходят за границы сектора
+
+        Return
+            True - если выходит за границы
+        """
+        b_start = self._header.size + offset
+        b_end = b_start + size
+        if b_start > len(self._storage):
+            return True
+        if b_end > len(self._storage):
+            return True
+        return False
+
+    def get_next_sector_number(self) -> Optional[int]:
+        """
+        Reads chain header and return next sector number (logical)
+        in chain if it exist
+        """
+        b_start = self._header.size
+        b_end = b_start + ChainHeader.get_size()
+        ch = ChainHeader.create_from_raw(self._storage[b_start:b_end])
+        if ch.next_sector == -1:  # End chain
+            return None
+        return ch.next_sector
 
 
 class SmartFSConfig(BaseModel):
@@ -472,3 +527,180 @@ class SmartStruct(BaseModel):
     free_sector_map: List[List[bool]] = Field(
         default_factory=list,
         description="Count of free sectors per erase block")
+
+
+class SmartFSEntry(BaseModel):
+    """
+    This is an in-memory representation of the SMART inode as extracted from
+    FLASH and with additional state information.
+
+    struct smartfs_entry_s
+    {
+    uint16_t          firstsector;  /* Sector number of the name */
+    uint16_t          dsector;      /* Sector number of the directory entry */
+    uint16_t          doffset;      /* Offset of the directory entry */
+    uint16_t          dfirst;       /* 1st sector number of the directory entry */
+    uint16_t          flags;        /* Flags, including mode */
+    FAR char          *name;        /* inode name */
+    uint32_t          utc;          /* Time stamp */
+    uint32_t          datlen;       /* Length of inode data */
+    };
+    """
+    # TODO: rename
+    # First sector of directory
+    first_sector: int = Field(
+        ..., description="Logical sector number of the name")
+    # Sector wehre stored directory entry
+    dir_sector: int = Field(
+        ..., description="Logical sector number of the directory entry")
+    dir_offset: int = Field(
+        ..., description="Offset of the directory entry, from SH")
+    name: str = Field(..., description="Inode name")
+
+
+class SmartFSDirEntryType(int, Enum):
+    file = 0
+    dir = 1
+
+
+class SmartFSDirEntryFlags(BaseModel):
+    """
+    /* Directory entry flag definitions */
+    0 - set; 1 - unset
+
+    #define SMARTFS_DIRENT_EMPTY      0x8000  /* Set to non-erase state when entry used */
+    1000 0000 0000 0000
+    #define SMARTFS_DIRENT_ACTIVE     0x4000  /* Set to erase state when entry is active */
+    0100 0000 0000 0000
+    #define SMARTFS_DIRENT_TYPE       0x2000  /* Indicates the type of entry (file/dir) */
+    0010 0000 0000 0000
+    #define SMARTFS_DIRENT_DELETING   0x1000  /* Directory entry is being deleted */
+    0001 0000 0000 0000
+
+    #define SMARTFS_DIRENT_RESERVED   0x0E00  /* Reserved bits */
+    0000 1110 0000 0000
+    #define SMARTFS_DIRENT_MODE       0x01FF  /* Mode the file was created with */
+    0000 0001 1111 1111
+
+    #define SMARTFS_DIRENT_TYPE_DIR   0x2000
+    #define SMARTFS_DIRENT_TYPE_FILE  0x0000
+
+    #define SMARTFS_BFLAG_DIRTY       0x01    /* Set if data changed in the sector */
+    #define SMARTFS_BFLAG_NEWALLOC    0x02    /* Set if sector not written since alloc */
+    """
+    empty: int = Field(
+        1, description="Set to non-erase state when entry used")
+    active: int = Field(
+        1, description="Set to erase state when entry is active")
+    type: SmartFSDirEntryType = Field(
+        SmartFSDirEntryType.dir,
+        description="Indicates the type of entry (file - 0/dir - 1)")
+    deleting: int = Field(
+        1, description="Directory entry is being deleted")
+    mode: int = Field(
+        0x01FF, description="Mode the file was created with")
+
+    def get_pack(self) -> bytes:
+        """
+        Return a 2-byte packed
+        """
+        return struct.pack(
+            "<H",
+            self.empty << 15 |
+            self.active << 14 |
+            self.type.value << 13 |
+            self.deleting << 12 |
+            0b111 << 9 |
+            self.mode
+        )
+
+    @classmethod
+    def create_from_raw(self, values: bytes) -> "SmartFSDirEntryFlags":
+        """
+        Order bytes: little endian (LSB first)
+        """
+        return SmartFSDirEntryFlags(
+            empty=(values[1] & 0x80) >> 7,
+            active=(values[1] & 0x40) >> 6,
+            type=SmartFSDirEntryType((values[1] & 0x20) >> 5),
+            deleting=(values[1] & 0x10) >> 4,
+            mode=(values[0] + (values[1] << 8)) & 0x01FF
+        )
+
+    @property
+    def size(self) -> int:
+        """bytes"""
+        return 2
+
+
+class SmartFSEntryHeader(BaseModel):
+    """
+    This is an on-device representation of the SMART inode as it exists on
+    the FLASH.
+
+    struct smartfs_entry_header_s
+    {
+    uint16_t          flags;        /* Flags, including permissions:
+                                    *  15:   Empty entry
+                                    *  14:   Active entry
+                                    *  12-0: Permissions bits */
+    int16_t           firstsector;  /* Sector number of the name */
+    uint32_t          utc;          /* Time stamp */
+    char              name[0];      /* inode name */
+    };
+    """
+    flags: SmartFSDirEntryFlags = Field(
+        SmartFSDirEntryFlags(), description="Flags, including permissions")
+    first_sector: int = Field(
+        ..., description="Logical sector number where stored entity")
+    utc: datetime.datetime = Field(
+        datetime.datetime.now(datetime.UTC), description="Time stamp")
+    name: str = Field(
+        ..., description="Inode name")
+
+    def get_pack(self, max_name_len: int) -> bytes:
+        """
+        Return a packed header
+
+        Args
+            max_name_len: Length of the name, how bytes will be used for name
+        """
+        if len(self.name) > max_name_len:
+            raise ValueError(
+                f"Name {self.name} is longer than {max_name_len} bytes")
+        name = (
+            self.name.encode("ascii") +
+            b"\x00" * (max_name_len - len(self.name))
+        )
+        return self.flags.get_pack() + struct.pack(
+            "<h", self.first_sector) + struct.pack(
+            "<I", int(self.utc.timestamp())) + name
+
+    @classmethod
+    def create_from_raw(cls, value: bytes) -> "SmartFSEntryHeader":
+        """
+        Order bytes: little endian (LSB first)
+        Full length dependency from max_len_filename
+        """
+        # Skip if name start from 0xff
+        name = ""
+        if value[8] != 0xff:
+            name = bytes(value[8:]).decode("ascii").rstrip("\x00")
+
+        return SmartFSEntryHeader(
+            flags=SmartFSDirEntryFlags.create_from_raw(value[:2]),
+            first_sector=struct.unpack("<h", value[2:4])[0],
+            utc=datetime.datetime.fromtimestamp(
+                struct.unpack("<I", value[4:8])[0],
+                datetime.timezone.utc
+            ),
+            name=name
+        )
+
+    @classmethod
+    def get_size(self, max_len_filename: int) -> int:
+        """
+        Return the size of the header in bytes with
+        add max len filename
+        """
+        return 2 + 2 + 4 + max_len_filename

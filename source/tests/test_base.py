@@ -74,3 +74,71 @@ class TestBase(unittest.TestCase):
             used=2,
         )
         self.assertEqual(r.get_pack(), b'\x02\xff\xff\x02\x00')
+
+    def test_ChainHeader_from_raw(self):
+        r = base.ChainHeader.create_from_raw(b"\x01\x34\x00\x05\x00")
+        self.assertEqual(r.sector_type, base.SectorType.directory)
+        self.assertEqual(r.next_sector, 0x34)
+        self.assertEqual(r.used, 5)
+
+    def test_SmartFSDirEntryFlags(self):
+        # not set all
+        r = base.SmartFSDirEntryFlags()
+        self.assertEqual(r.get_pack(), b'\xff\xff')
+
+        # set empty
+        r = base.SmartFSDirEntryFlags()
+        r.empty = 0
+        self.assertEqual(r.get_pack(), b'\xff\x7f')
+
+        # set active
+        r = base.SmartFSDirEntryFlags()
+        r.active = 0
+        self.assertEqual(r.get_pack(), b'\xff\xbf')
+
+        # set type
+        r = base.SmartFSDirEntryFlags()
+        r.type = base.SmartFSDirEntryType.file
+        self.assertEqual(r.get_pack(), b'\xff\xdf')
+
+        # set deleting
+        r = base.SmartFSDirEntryFlags()
+        r.deleting = 0
+        self.assertEqual(r.get_pack(), b'\xff\xef')
+
+    def test_SmartFSDirEntryFlags_from_raw(self):
+        # set empty
+        r = base.SmartFSDirEntryFlags.create_from_raw(b"\xff\x7f")
+        self.assertEqual(r.empty, 0)
+
+        # set active
+        r = base.SmartFSDirEntryFlags.create_from_raw(b"\xff\xbf")
+        self.assertEqual(r.active, 0)
+
+        # set type file
+        r = base.SmartFSDirEntryFlags.create_from_raw(b"\xff\xdf")
+        self.assertEqual(r.type, base.SmartFSDirEntryType.file)
+
+        # set deleting
+        r = base.SmartFSDirEntryFlags.create_from_raw(b"\xff\xef")
+        self.assertEqual(r.deleting, 0)
+
+        # set mode
+        r = base.SmartFSDirEntryFlags.create_from_raw(b"\x14\xFF")
+        self.assertEqual(r.mode, 0x114)
+
+    def test_SmartFSEntryHeader(self):
+        r = base.SmartFSEntryHeader(
+            first_sector=10,
+            name="check"
+        )
+        p = r.get_pack(max_name_len=16)
+        print(p)
+        self.assertEqual(len(p), 24)
+
+    def test_test_SmartFSEntryHeader_from_raw(self):
+        r = base.SmartFSEntryHeader.create_from_raw(
+            b'\xff\xff\n\x00l\xda\xc8fcheck\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
+        )
+        self.assertEqual(r.first_sector, 10)
+        self.assertEqual(r.name, "check")
