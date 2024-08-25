@@ -53,14 +53,45 @@ class SectorSize(int, Enum):
         """
         return 2 ** (value.value + 8)
 
+    @staticmethod
+    def create_from_int(size: int) -> "SectorSize":
+        """
+        Convert size in bytes to SectorSize
+        """
+        if size == 256:
+            return SectorSize.b256
+        if size == 512:
+            return SectorSize.b512
+        if size == 1024:
+            return SectorSize.b1024
+        if size == 2048:
+            return SectorSize.b2048
+        if size == 4096:
+            return SectorSize.b4096
+        if size == 8192:
+            return SectorSize.b8192
+        if size == 16384:
+            return SectorSize.b16384
+        if size == 32768:
+            return SectorSize.b32768
+        raise ValueError("Invalid sector size")
+
+    @classmethod
+    def to_list(cls) -> List[int]:
+        """
+        List sizes in bytes
+        """
+        return [int(value[1:]) for value in cls.__members__.keys()]
+
 
 class Version(int, Enum):
     """
     The valid values for the version SmartFS
     """
     v1 = 0b01
-    v2 = 0b10
-    v3 = 0b11
+    # TODO: Implementation
+    # v2 = 0b10
+    # v3 = 0b11
 
 
 class CRCValue(Enum):
@@ -70,6 +101,13 @@ class CRCValue(Enum):
     crc_disable = "none"
     crc8 = "crc8"
     crc16 = "crc16"
+
+    @classmethod
+    def to_list(cls) -> List[str]:
+        """
+        List CRC values
+        """
+        return [value.value for value in cls.__members__.values()]
 
 
 class Commited(Enum):

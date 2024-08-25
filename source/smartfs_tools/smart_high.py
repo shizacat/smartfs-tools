@@ -137,7 +137,7 @@ class SmartHigh:
 
     def dump(self) -> bytes:
         """Возвращает содержимое виртуального диска"""
-        return self._mtd_block_layer.dump()
+        return self._mtd_block_layer.dump
 
     @staticmethod
     def read_dump(dump: bytes) -> "SmartHigh":
