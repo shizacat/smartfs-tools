@@ -64,6 +64,10 @@ class MTDBlockLayer:
             self._storage[:] = self._fill_value * self._device_size
             self._llformat()
             self._fs_media_write()
+
+            # TODO: подумать, может убрать в другое место
+            self._smart_struct.free_sector_map[0][0] = 0
+            # set allocated 0 sector
         else:
             pass
             # TODO: scan device
@@ -251,6 +255,7 @@ class MTDBlockLayer:
 
         Не проверяет существование старого
         """
+        print("Create phy sector number: ", phy_sector_number)
         # Get border
         b_start = phy_sector_number * self._sector_size_byte
         b_end = b_start + self._sector_size_byte

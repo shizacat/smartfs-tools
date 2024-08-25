@@ -1,8 +1,8 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import argparse
 from pathlib import Path
-from typing import TypedDict, List
+from typing import TypedDict, List, Optional
 
 from smartfs_tools import SmartHigh
 from smartfs_tools import base
@@ -19,7 +19,7 @@ class Args(TypedDict):
     smart_max_len_filename: int
 
 
-def arguments() -> argparse.Namespace:
+def arguments(args_list: Optional[List[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Create dump smartFS partition from directory"
     )
@@ -76,7 +76,7 @@ def arguments() -> argparse.Namespace:
         default=16,
         help="Max length of filename in smartFS",
     )
-    return parser.parse_args()
+    return parser.parse_args(args_list)
 
 
 def walk_dir_find_files(path: Path):
@@ -96,8 +96,8 @@ def walk_dir_find_all_dir(path: Path) -> List[str]:
     return list(result)
 
 
-def main():
-    args: Args = arguments()
+def main(args_list: Optional[List[str]] = None):
+    args: Args = arguments(args_list)
 
     smartfs = SmartHigh(
         storage=bytearray(args.storage_size),
@@ -112,6 +112,9 @@ def main():
         )
     )
 
+    if not args.base_dir.exists():
+        raise ValueError("Base dir not exists")
+
     for item in walk_dir_find_all_dir(args.base_dir):
         smartfs.cmd_mkdir("/" + item)
 
@@ -123,7 +126,7 @@ def main():
             )
 
     with args.out.open("wb") as f:
-        f.write(smartfs.dump())
+        f.write(smartfs._mtd_block_layer._storage)
 
 
 if __name__ == "__main__":

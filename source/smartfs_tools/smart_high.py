@@ -74,6 +74,7 @@ class SmartHigh:
             if is_first:
                 sector = self._mtd_block_layer._log_sector_get(
                     entry_h_file.first_sector)
+                is_first = False
             else:
                 # Add new sector in chain
                 # __ allocate new sector
@@ -94,14 +95,12 @@ class SmartHigh:
             # Write data
             data = body[i:i + empty_size_in_sector]
             sector.set_bytes(pfrom=base.ChainHeader.get_size(), value=data)
-            # __ update chain
-            chain_h = sector.read_object(
-                class_name=base.ChainHeader,
-                offset=0,
-                size=base.ChainHeader.get_size(),
+            # __ set chain
+            chain_h = base.ChainHeader(
+                sector_type=base.SectorType.file,
+                next_sector=0xffff,
+                used=len(data),
             )
-            chain_h.used = len(data)
-            chain_h.sector_type = base.SectorType.file
             sector.set_bytes(pfrom=0, value=chain_h.get_pack())
 
     def cmd_file_read(self, path: str) -> bytes:
