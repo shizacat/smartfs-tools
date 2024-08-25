@@ -1,5 +1,6 @@
 """
 """
+import os
 import datetime
 from typing import Optional
 
@@ -39,14 +40,69 @@ class SmartHigh:
         """Возвращает список файлов и папок в указанной директории"""
         raise NotImplementedError()
 
-    def cmd_file_write(self, path: str, body: bytes):
-        """Создает файл с указанным именем и содержимым
+    def cmd_file_create_write(self, path: str, body: bytes):
+        """Создает новый файл с указанным именем и содержимым
         Если файл существует перезаписывает
+        name: smartfs_open; smartfs_write
 
         Args:
             path - полный путь к файлу включая имя файла
         """
-        raise NotImplementedError()
+        if not path.startswith("/"):
+            raise ValueError("Path must be absolute")
+        dirname, filename = os.path.split(path)
+
+        # find dir_entry
+        dir_entry = self._finddirentry(dirname)
+
+        # create file entry
+        entry_h_file = self._createentry(
+            name=filename,
+            entry_parent=dir_entry,
+            entry_type=base.SmartFSDirEntryType.file,
+        )
+
+        # fill content
+        # TODO: Fix размер заголовка сектора нужно получать из объекта
+        empty_size_in_sector = (
+            self._mtd_block_layer._sector_size_byte -
+            5 -  # base.SectorHeader.size -
+            base.ChainHeader.get_size()
+        )
+        is_first = True
+        for i in range(0, len(body), empty_size_in_sector):
+            if is_first:
+                sector = self._mtd_block_layer._log_sector_get(
+                    entry_h_file.first_sector)
+            else:
+                # Add new sector in chain
+                # __ allocate new sector
+                sector_number = self._mtd_block_layer._allocsector()
+                # __ fill old chain header
+                chain_h = sector.read_object(
+                    class_name=base.ChainHeader,
+                    offset=0,
+                    size=base.ChainHeader.get_size(),
+                )
+                chain_h.next_sector = sector_number
+                sector.set_bytes(pfrom=0, value=chain_h.get_pack())
+
+                # Set sector
+                sector = self._mtd_block_layer._log_sector_get(sector_number)
+                # TODO: задать тип сектора в CH
+
+            # Write data
+            data = body[i:i + empty_size_in_sector]
+            sector.set_bytes(pfrom=base.ChainHeader.get_size(), value=data)
+            # __ update chain
+            chain_h = sector.read_object(
+                class_name=base.ChainHeader,
+                offset=0,
+                size=base.ChainHeader.get_size(),
+            )
+            chain_h.used = len(data)
+            chain_h.sector_type = base.SectorType.file
+            sector.set_bytes(pfrom=0, value=chain_h.get_pack())
 
     def cmd_file_read(self, path: str) -> bytes:
         """Читает содержимое файла
@@ -74,7 +130,10 @@ class SmartHigh:
             sub_dir = "/"
 
         entry = self._finddirentry(sub_dir)
-        self._createentry(entry_parent=entry, name=new_dir)
+        self._createentry(
+            entry_parent=entry,
+            name=new_dir,
+            entry_type=base.SmartFSDirEntryType.dir)
 
     def dump(self) -> bytes:
         """Возвращает содержимое виртуального диска"""
@@ -161,8 +220,11 @@ class SmartHigh:
         return entry
 
     def _createentry(
-        self, entry_parent: base.SmartFSEntry, name: str
-    ) -> base.SmartFSEntry:
+        self,
+        entry_parent: base.SmartFSEntry,
+        name: str,
+        entry_type: base.SmartFSDirEntryType,
+    ) -> base.SmartFSEntryHeader:
         """
         Creates a new entry in the specified parent directory
         name: smartfs_createentry
@@ -214,17 +276,19 @@ class SmartHigh:
                 break
             offset += size_header
 
-        # Create new sectro for new entry
+        # Create new sector for new entry
         sector_new_number = self._mtd_block_layer._allocsector()
         # __ add chain header
         sector_new_obj = self._mtd_block_layer._log_sector_get(
             sector_new_number)
+        if entry_type == base.SmartFSDirEntryType.dir:
+            sector_type = base.SectorType.directory
+        else:
+            sector_type = base.SectorType.file
         sector_new_obj.set_bytes(
             pfrom=0,
             value=base.ChainHeader(
-                sector_type=base.SectorType.directory,
-                next_sector=0xffff,
-                used=0xffff,
+                sector_type=sector_type, next_sector=0xffff, used=0xffff,
             ).get_pack()
         )
 
@@ -233,12 +297,13 @@ class SmartHigh:
         entry.first_sector = sector_new_number
         entry.utc = datetime.datetime.now(datetime.UTC)
         entry.flags.empty = 0  # not empty
+        entry.flags.type = entry_type
 
         # Write entry on sector
         sector.set_bytes(
             pfrom=offset,
             value=entry.get_pack(
-                max_name_len=self._mtd_block_layer._smartfs_config.max_len_filename
+                max_name_len=self._mtd_block_layer._smartfs_config.max_len_filename  # noqa: E501
             )
         )
 
