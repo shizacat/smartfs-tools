@@ -31,14 +31,14 @@ repository = "https://github.com/shizacat/smartfs-tools"
 path = "source/smartfs_tools/__init__.py"
 
 [tool.hatch.build.targets.sdist]
+packages = ["source/smartfs_tools"]
 exclude = [
   "source/tests",
   "/docs",
 ]
-include = ["source/smartfs_tools"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["source/smartfs_tools"]
+packages = ["smartfs_tools"]
 
 [tool.flake8]
 max-line-length = 80
