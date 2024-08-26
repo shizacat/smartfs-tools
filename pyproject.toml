@@ -40,6 +40,9 @@ exclude = [
 [tool.hatch.build.targets.wheel]
 packages = ["smartfs_tools"]
 
+[project.scripts]
+smartfs_mkdump = "smartfs_tools.script:main"
+
 [tool.flake8]
 max-line-length = 80
 exclude = [
