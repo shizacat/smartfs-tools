@@ -3,6 +3,7 @@
 *.pyc
 source/check.py
 .coverage
+dist/*
 
 # Runtime
 test.bin

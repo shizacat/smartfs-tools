@@ -1,0 +1,47 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "smartfs_tools"
+dynamic = ["version"]
+authors = [
+    {name = "Alexey Matveev", email = "tippet@yandex.ru"},
+]
+description = "Python library and utilities for creating a dump of SmartsFS from a directory."
+readme = "README.md"
+requires-python = ">=3.8"
+keywords = ["nuttx", "smartfs", "dump", "filesystem", "filesystem dump"]
+license = {text = "Apache License (2.0)"}
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent"
+]
+dependencies = [
+    "crc",
+    "pydantic>=2,<3"
+]
+
+[project.urls]
+Documentation = "https://github.com/shizacat/smartfs-tools"
+repository = "https://github.com/shizacat/smartfs-tools"
+
+[tool.hatch.version]
+path = "source/smartfs_tools/__init__.py"
+
+[tool.hatch.build.targets.sdist]
+exclude = [
+  "source/tests",
+  "/docs",
+]
+include = ["source/smartfs_tools"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["source/smartfs_tools"]
+
+[tool.flake8]
+max-line-length = 80
+exclude = [
+    "tests"
+]
