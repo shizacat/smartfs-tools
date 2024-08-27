@@ -686,7 +686,8 @@ class SmartFSEntryHeader(BaseModel):
     first_sector: int = Field(
         ..., description="Logical sector number where stored entity")
     utc: datetime.datetime = Field(
-        datetime.datetime.now(datetime.UTC), description="Time stamp")
+        datetime.datetime.now(tz=datetime.timezone.utc),
+        description="Time stamp")
     name: str = Field(
         ..., description="Inode name")
 
