@@ -541,7 +541,7 @@ class SmartStruct(BaseModel):
     uint8_t               debuglevel;       /* Debug reporting level */
     uint8_t               availsectperblk;  /* Number of usable sectors per erase block */
     FAR uint16_t         *smap;             /* Virtual to physical sector map */
-    """
+    """  # noqa: E501
     neraseblocks: int = Field(
         ..., description="Number of erase blocks or sub-sectors")
     sectorsperblk: int = Field(
@@ -576,7 +576,7 @@ class SmartFSEntry(BaseModel):
     uint16_t          firstsector;  /* Sector number of the name */
     uint16_t          dsector;      /* Sector number of the directory entry */
     uint16_t          doffset;      /* Offset of the directory entry */
-    uint16_t          dfirst;       /* 1st sector number of the directory entry */
+    uint16_t          dfirst;       /* 1st sector number of the directory entry
     uint16_t          flags;        /* Flags, including mode */
     FAR char          *name;        /* inode name */
     uint32_t          utc;          /* Time stamp */
@@ -596,6 +596,10 @@ class SmartFSEntry(BaseModel):
 
 
 class SmartFSDirEntryType(int, Enum):
+    """
+    #define SMARTFS_DIRENT_TYPE_DIR   0x2000
+    #define SMARTFS_DIRENT_TYPE_FILE  0x0000
+    """
     file = 0
     dir = 1
 
@@ -606,25 +610,16 @@ class SmartFSDirEntryFlags(BaseModel):
     0 - set; 1 - unset
 
     #define SMARTFS_DIRENT_EMPTY      0x8000  /* Set to non-erase state when entry used */
-    1000 0000 0000 0000
     #define SMARTFS_DIRENT_ACTIVE     0x4000  /* Set to erase state when entry is active */
-    0100 0000 0000 0000
     #define SMARTFS_DIRENT_TYPE       0x2000  /* Indicates the type of entry (file/dir) */
-    0010 0000 0000 0000
     #define SMARTFS_DIRENT_DELETING   0x1000  /* Directory entry is being deleted */
-    0001 0000 0000 0000
 
     #define SMARTFS_DIRENT_RESERVED   0x0E00  /* Reserved bits */
-    0000 1110 0000 0000
     #define SMARTFS_DIRENT_MODE       0x01FF  /* Mode the file was created with */
-    0000 0001 1111 1111
-
-    #define SMARTFS_DIRENT_TYPE_DIR   0x2000
-    #define SMARTFS_DIRENT_TYPE_FILE  0x0000
 
     #define SMARTFS_BFLAG_DIRTY       0x01    /* Set if data changed in the sector */
     #define SMARTFS_BFLAG_NEWALLOC    0x02    /* Set if sector not written since alloc */
-    """
+    """  # noqa: E501
     empty: int = Field(
         1, description="Set to non-erase state when entry used")
     active: int = Field(
