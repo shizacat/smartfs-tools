@@ -3,6 +3,7 @@
 *.pyc
 source/check.py
 .coverage
+coverage.xml
 dist/*
 
 # Runtime
