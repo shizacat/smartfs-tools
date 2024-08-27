@@ -1,10 +1,10 @@
 """
 """
-import os
 import datetime
-from typing import Optional
+import os
 
 from smartfs_tools import base
+
 from .smart import MTDBlockLayer
 
 

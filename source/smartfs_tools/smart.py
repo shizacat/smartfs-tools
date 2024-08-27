@@ -1,21 +1,20 @@
-import logging
 from typing import Optional
 
+from smartfs_tools import base
+
 from .base import (
-    SectorSize,
-    Version,
-    SectorHeader,
-    SectorStatus,
-    Signature,
-    CRCValue,
-    Sector,
-    Commited,
-    Released,
     SCTN_ROOT_DIR_SECTOR,
     ChainHeader,
+    Commited,
+    CRCValue,
+    Released,
+    Sector,
+    SectorHeader,
+    SectorSize,
+    SectorStatus,
     SectorType,
+    Signature,
 )
-from smartfs_tools import base
 
 
 class MTDBlockLayer:
@@ -35,7 +34,7 @@ class MTDBlockLayer:
         self,
         erase_block_size: int,
         storage: bytearray,
-        fill_value: bytes = b'\xFF',
+        fill_value: bytes = b"\xFF",
         smartfs_config: base.SmartFSConfig = base.SmartFSConfig(),
         formated: bool = False,
     ):

@@ -2,10 +2,9 @@
 
 import argparse
 from pathlib import Path
-from typing import TypedDict, List, Optional
+from typing import List, Optional, TypedDict
 
-from smartfs_tools import SmartHigh
-from smartfs_tools import base
+from smartfs_tools import SmartHigh, base
 
 
 class Args(TypedDict):

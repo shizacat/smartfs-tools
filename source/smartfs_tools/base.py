@@ -1,12 +1,11 @@
-import struct
 import datetime
-from enum import Enum
+import struct
 from dataclasses import dataclass
-from typing import Optional, Dict, List
+from enum import Enum
+from typing import Dict, List, Optional
 
-from pydantic import BaseModel, Field
 import crc
-
+from pydantic import BaseModel, Field
 
 # Definition
 # ==========
@@ -372,7 +371,7 @@ class Sector:
         storage: bytearray,
         header: Optional[SectorHeader] = None,
         is_new: bool = False,
-        fill_value: bytes = b'\xFF',
+        fill_value: bytes = b"\xFF",
     ):
         """
         Args:
@@ -416,7 +415,7 @@ class Sector:
         """
         Заполняет пустое место в секторе
         """
-        self._storage[0:1] = b'a'
+        self._storage[0:1] = b"a"
         self._storage[self._header.size:] = self._fill_value * (
             len(self._storage) - self._header.size
         )
@@ -440,7 +439,7 @@ class Sector:
             raise ValueError("CRC value is not supported")
 
         # Calculation
-        buffer: bytes = b''
+        buffer: bytes = b""
         # __ Calculate CRC on data region of the sector
         buffer += self._storage[self._header.size:]
         # __ Add logical sector number and seq to the CRC calculation, 3 byte
