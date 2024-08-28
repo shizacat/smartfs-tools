@@ -254,7 +254,6 @@ class MTDBlockLayer:
 
         Не проверяет существование старого
         """
-        print("Create phy sector number: ", phy_sector_number)
         # Get border
         b_start = phy_sector_number * self._sector_size_byte
         b_end = b_start + self._sector_size_byte
