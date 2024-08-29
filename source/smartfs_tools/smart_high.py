@@ -175,26 +175,27 @@ class SmartHigh:
             # find sub dir in entry dir
             # __ Check all dir_entry in sector
             sector = self._mtd_block_layer._log_sector_get(entry.dir_sector)
-            offset = base.ChainHeader.get_size()  # After chain header
-            size_header = base.SmartFSEntryHeader.get_size(
+            ch_offset = base.ChainHeader.get_size()  # After chain header
+            size_entry_header = base.SmartFSEntryHeader.get_size(
                 self._mtd_block_layer._smartfs_config.max_len_filename)
             dir_offset = 0
             while True:
-                if sector.borders_is_big(offset=offset, size=size_header):
+                if sector.borders_is_big(
+                    offset=ch_offset + dir_offset, size=size_entry_header
+                ):
                     # Закончились данные в этом секторе, пробуем следующий
                     next_sector = sector.get_next_sector_number()
                     if next_sector == -1:
                         raise ValueError(f"Directory not found: {dir}")
                     sector = self._mtd_block_layer._log_sector_get(next_sector)
-                    offset = base.ChainHeader.get_size()
                     dir_offset = 0
                     sector_process = next_sector
 
                 # __ Read dir_entry
                 eh = sector.read_object(
                     class_name=base.SmartFSEntryHeader,
-                    offset=offset,
-                    size=size_header,
+                    offset=ch_offset + dir_offset,
+                    size=size_entry_header,
                 )
                 # check entry exists
                 if eh.first_sector == -1:
@@ -209,7 +210,7 @@ class SmartHigh:
                     )
                     is_found = True
                     break
-                dir_offset += 1
+                dir_offset += size_entry_header
 
             if is_found is False:
                 raise ValueError(f"Directory not found: {dir}")
