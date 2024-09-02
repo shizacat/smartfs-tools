@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+from collections import deque
 from pathlib import Path
 from typing import List, Optional, TypedDict
 
@@ -87,12 +88,27 @@ def walk_dir_find_files(path: Path):
 def walk_dir_find_all_dir(path: Path) -> List[str]:
     """
     Find uniqued directories
+
+    Return
+        List of directories relative to path,
+        order from root to leaf
     """
-    result = set()
-    for p in path.glob("**/*"):
-        if p.is_dir():
-            result.add(str(p.relative_to(path)))
-    return list(result)
+    result = []
+    visited = set()
+
+    # Add root dir
+    queue = deque([path])
+    while queue:
+        cdir = queue.popleft()
+        if cdir in visited:
+            continue
+        # new dir
+        result.append(str(cdir.relative_to(path)))
+        subdirs = [p for p in cdir.iterdir() if p.is_dir()]
+        queue.extend(subdirs)
+
+    # Remove root dir
+    return result[1:]
 
 
 def main(args_list: Optional[List[str]] = None):

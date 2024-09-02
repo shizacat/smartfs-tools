@@ -1,5 +1,6 @@
 ## [Unreleased]
 
+- Fix: walk_dir_find_all_dir alogrithm update
 
 ## [0.2.0] - 2024-08-29
 ### Fixed
