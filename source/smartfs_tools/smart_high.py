@@ -316,7 +316,7 @@ class SmartHigh:
         # Fill entry
         entry.name = name
         entry.first_sector = sector_new_number
-        entry.utc = datetime.datetime.now(datetime.UTC)
+        entry.utc = datetime.datetime.now(tz=datetime.timezone.utc)
         entry.flags.empty = 0  # not empty
         entry.flags.type = entry_type
 
