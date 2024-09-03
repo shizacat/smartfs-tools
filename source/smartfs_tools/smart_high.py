@@ -2,6 +2,7 @@
 """
 import datetime
 import os
+from typing import Generator
 
 from smartfs_tools import base
 
@@ -154,17 +155,8 @@ class SmartHigh:
         if not path_abs.startswith("/"):
             raise ValueError("Path must be absolute")
 
-        # Start from first root
-        sector = self._mtd_block_layer._log_sector_get(
-            base.SCTN_ROOT_DIR_SECTOR)
-        sector_process = base.SCTN_ROOT_DIR_SECTOR
-
-        entry = base.SmartFSEntry(
-            first_sector=sector._header.logical_sector_number,
-            dir_sector=sector._header.logical_sector_number,
-            dir_offset=0,
-            name="/"
-        )
+        # Get root entry
+        entry = self._create_smart_entry_root()
 
         if path_abs == "/":
             return entry
@@ -173,44 +165,36 @@ class SmartHigh:
             is_found: bool = False
 
             # find sub dir in entry dir
-            # __ Check all dir_entry in sector
-            sector = self._mtd_block_layer._log_sector_get(entry.dir_sector)
-            ch_offset = base.ChainHeader.get_size()  # After chain header
-            size_entry_header = base.SmartFSEntryHeader.get_size(
-                self._mtd_block_layer._smartfs_config.max_len_filename)
-            dir_offset = 0
-            while True:
-                if sector.borders_is_big(
-                    offset=ch_offset + dir_offset, size=size_entry_header
-                ):
-                    # Закончились данные в этом секторе, пробуем следующий
-                    next_sector = sector.get_next_sector_number()
-                    if next_sector == -1:
-                        raise ValueError(f"Directory not found: {dir}")
-                    sector = self._mtd_block_layer._log_sector_get(next_sector)
-                    dir_offset = 0
-                    sector_process = next_sector
+            for sector in self._walk_sectors_in_entry(entry):
+                # const
+                size_entry_header = base.SmartFSEntryHeader.get_size(
+                    self._mtd_block_layer._smartfs_config.max_len_filename)
+                ch_offset = base.ChainHeader.get_size()  # After chain header
+                # ---
+                dir_offset = 0
 
-                # __ Read dir_entry
-                eh = sector.read_object(
-                    class_name=base.SmartFSEntryHeader,
-                    offset=ch_offset + dir_offset,
-                    size=size_entry_header,
-                )
-                # check entry exists
-                if eh.first_sector == -1:
-                    break
-
-                if eh.name == dir:
-                    entry = base.SmartFSEntry(
-                        first_sector=eh.first_sector,
-                        dir_sector=sector_process,
-                        dir_offset=dir_offset,
-                        name=eh.name
+                # Read all entry header in sector
+                while True:
+                    eh = sector.read_object(
+                        class_name=base.SmartFSEntryHeader,
+                        offset=ch_offset + dir_offset,
+                        size=size_entry_header,
                     )
-                    is_found = True
-                    break
-                dir_offset += size_entry_header
+                    # check entry exists
+                    if eh.first_sector.to_bytes(2, "little") == b"\xff\xff":
+                        break
+
+                    # compare name
+                    if eh.name == dir:
+                        entry = base.SmartFSEntry(
+                            first_sector=eh.first_sector,
+                            dir_sector=sector,
+                            dir_offset=dir_offset,
+                            name=eh.name
+                        )
+                        is_found = True
+                        break
+                    dir_offset += size_entry_header
 
             if is_found is False:
                 raise ValueError(f"Directory not found: {dir}")
@@ -218,6 +202,41 @@ class SmartHigh:
         if entry is None:
             raise ValueError("Wrong something")
         return entry
+
+    def _walk_sectors_in_entry(
+        self, entry: base.SmartFSEntry
+    ) -> Generator[base.Sector, None, None]:
+        """
+        Returns a generator that yields all sectors in the entry
+        """
+        sector_log_num = entry.first_sector
+        while True:
+            sector = self._mtd_block_layer._log_sector_get(sector_log_num)
+            yield sector
+            # Find next sector
+            sector_log_num = sector.get_next_sector_number()
+            if sector_log_num is None:
+                break
+
+    def _split_abs_dir(self, path_abs: str) -> Generator[str, None, None]:
+        """Split absolute path to subdir, root will be inserted
+
+        Example:
+          path_abs = "/dir1/dir2/dir3"
+          return ["/", "dir1", "dir2", "dir3"]
+        """
+        for item in path_abs.rstrip("/").split("/"):
+            yield "/" if item == "" else item
+
+    def _create_smart_entry_root(self) -> base.SmartFSEntry:
+        sector = self._mtd_block_layer._log_sector_get(
+            base.SCTN_ROOT_DIR_SECTOR)
+        return base.SmartFSEntry(
+            first_sector=sector._header.logical_sector_number,
+            dir_sector=sector._header.logical_sector_number,
+            dir_offset=0,
+            name="/"
+        )
 
     def _createentry(
         self,
@@ -251,20 +270,22 @@ class SmartHigh:
                         pfrom=0,
                         value=base.ChainHeader(
                             sector_type=base.SectorType.directory,
-                            next_sector=-1,
-                            used=-1,
+                            next_sector=65535,  # 0xffff
+                            used=65535,  # 0xffff
                         ).get_pack()
                     )
                     # Add it to chain header
                     ch: base.ChainHeader = sector.read_object(
-                        offset=0, size=base.ChainHeader.get_size())
+                        class_name=base.ChainHeader,
+                        offset=0,
+                        size=base.ChainHeader.get_size())
                     ch.next_sector = sector_new
                     sector.set_bytes(pfrom=0, value=ch.get_pack())
                     next_sector = sector_new
 
                 # Process next sector
                 sector = self._mtd_block_layer._log_sector_get(next_sector)
-                offset = 0
+                offset = base.ChainHeader.get_size()
 
             entry = sector.read_object(
                 class_name=base.SmartFSEntryHeader,

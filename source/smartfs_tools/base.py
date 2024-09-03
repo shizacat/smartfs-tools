@@ -493,7 +493,7 @@ class Sector:
         b_start = self._header.size
         b_end = b_start + ChainHeader.get_size()
         ch = ChainHeader.create_from_raw(self._storage[b_start:b_end])
-        if ch.next_sector == -1:  # End chain
+        if ch.next_sector.to_bytes(2, "little") == b"\xFF\xFF":  # End chain, -1
             return None
         return ch.next_sector
 
