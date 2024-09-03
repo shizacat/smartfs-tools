@@ -188,7 +188,7 @@ class SmartHigh:
                     if eh.name == dir:
                         entry = base.SmartFSEntry(
                             first_sector=eh.first_sector,
-                            dir_sector=sector,
+                            dir_sector=sector._header.logical_sector_number,
                             dir_offset=dir_offset,
                             name=eh.name
                         )
