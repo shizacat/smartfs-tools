@@ -1,6 +1,6 @@
 # SmartFS tools
 
-[![Coverage Status](https://coveralls.io/repos/github/shizacat/smartfs-tools/badge.svg)](https://coveralls.io/github/shizacat/smartfs-tools)
+[![Coverage Status](https://coveralls.io/repos/github/shizacat/smartfs-tools/badge.svg?branch=main)](https://coveralls.io/github/shizacat/smartfs-tools?branch=main)
 
 Python library and utilities for creating a dump of SmartsFS from a directory. The dump will be written on flash memory next.
 
