@@ -2,6 +2,8 @@
 
 - Fix: walk_dir_find_all_dir alogrithm update
 - Fix: _create_entry, _find_entry - walk through sectors
+- Future: add support permissions bit in classes
+
 
 ## [0.2.0] - 2024-08-29
 ### Fixed
