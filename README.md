@@ -1,5 +1,7 @@
 # SmartFS tools
 
+[![Coverage Status](https://coveralls.io/repos/github/shizacat/smartfs-tools/badge.svg)](https://coveralls.io/github/shizacat/smartfs-tools)
+
 Python library and utilities for creating a dump of SmartsFS from a directory. The dump will be written on flash memory next.
 
 SmartFS is a file system usage in NuttX. SmartFS stands for Sector Mapped Allocation for Really Tiny (SMART) flash.

@@ -53,3 +53,7 @@ exclude = [
 line-length = 80
 exclude = ["tests"]
 lint.select = ["E", "F", "W", "Q", "I"]
+
+[tool.coverage.run]
+source = ["source"]
+omit = ["source/tests/*"]
