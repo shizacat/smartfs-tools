@@ -3,6 +3,7 @@
 - Fix: walk_dir_find_all_dir alogrithm update
 - Fix: _create_entry, _find_entry - walk through sectors
 - Future: add support permissions bit in classes
+- Add: mkdir, cmd_file_create_write add argument 'mode'
 
 
 ## [0.2.0] - 2024-08-29

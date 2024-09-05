@@ -41,13 +41,23 @@ class SmartHigh:
         """Возвращает список файлов и папок в указанной директории"""
         raise NotImplementedError()
 
-    def cmd_file_create_write(self, path: str, body: bytes):
+    def cmd_file_create_write(
+        self,
+        path: str,
+        body: bytes,
+        mode: base.ModeBits = base.ModeBits(
+            other=base.PBits(r=1, w=1, x=0),
+            group=base.PBits(r=1, w=1, x=0),
+            owner=base.PBits(r=1, w=1, x=0),
+        ),
+    ):
         """Создает новый файл с указанным именем и содержимым
         Если файл существует перезаписывает
         name: smartfs_open; smartfs_write
 
         Args:
             path - полный путь к файлу включая имя файла
+            mode - File mode bits (rwx)
         """
         if not path.startswith("/"):
             raise ValueError("Path must be absolute")
@@ -61,6 +71,7 @@ class SmartHigh:
             name=filename,
             entry_parent=dir_entry,
             entry_type=base.SmartFSDirEntryType.file,
+            mode=mode,
         )
 
         # fill content
@@ -112,7 +123,15 @@ class SmartHigh:
         """
         raise NotImplementedError()
 
-    def cmd_mkdir(self, path: str):
+    def cmd_mkdir(
+        self,
+        path: str,
+        mode: base.ModeBits = base.ModeBits(
+            other=base.PBits(r=1, w=1, x=1),
+            group=base.PBits(r=1, w=1, x=1),
+            owner=base.PBits(r=1, w=1, x=1),
+        ),
+    ):
         """
         Create a directory
         name: smartfs_mkdir
@@ -133,7 +152,8 @@ class SmartHigh:
         self._createentry(
             entry_parent=entry,
             name=new_dir,
-            entry_type=base.SmartFSDirEntryType.dir)
+            entry_type=base.SmartFSDirEntryType.dir,
+            mode=mode)
 
     def dump(self) -> bytes:
         """Возвращает содержимое виртуального диска"""
@@ -243,10 +263,14 @@ class SmartHigh:
         entry_parent: base.SmartFSEntry,
         name: str,
         entry_type: base.SmartFSDirEntryType,
+        mode: base.ModeBits,
     ) -> base.SmartFSEntryHeader:
         """
         Creates a new entry in the specified parent directory
         name: smartfs_createentry
+
+        Args:
+            mode - File mode bits (rwx)
         """
         if len(name) > self._mtd_block_layer._smartfs_config.max_len_filename:
             raise ValueError("Filename too long")
@@ -319,6 +343,7 @@ class SmartHigh:
         entry.utc = datetime.datetime.now(tz=datetime.timezone.utc)
         entry.flags.empty = 0  # not empty
         entry.flags.type = entry_type
+        entry.flags.mode = mode
 
         # Write entry on sector
         sector.set_bytes(
