@@ -1,8 +1,8 @@
+import dataclasses
 import datetime
 import struct
-from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 import crc
 from pydantic import BaseModel, Field
@@ -130,11 +130,87 @@ class SectorType(Enum):
     file = 2
 
 
+@dataclasses.dataclass
+class PBits:
+    """Permission bits
+
+    bit order (3 bit): rwx
+    """
+    r: int = 0
+    w: int = 0
+    x: int = 0
+
+    def __str__(self):
+        return (
+            f"{'r' if self.r else '-'}"
+            f"{'w' if self.w else '-'}"
+            f"{'x' if self.x else '-'}"
+        )
+
+    def get_pack(self) -> bytes:
+        return struct.pack("B", self.get_int())
+
+    def get_int(self) -> int:
+        return (self.r << 2) | (self.w << 1) | (self.x << 0)
+
+    @classmethod
+    def create_from_raw(self, value: Union[bytes, int]) -> "PBits":
+        if isinstance(value, int):
+            value_work = value
+        elif isinstance(value, bytes):
+            if len(value) != 1:
+                raise ValueError("Wrong length")
+            value_work = value[0]
+        return PBits(
+            r=(value_work & 0x04) >> 2,
+            w=(value_work & 0x02) >> 1,
+            x=(value_work & 0x01) >> 0,
+        )
+
+
+@dataclasses.dataclass
+class ModeBits:
+    """
+    Mode bits
+
+    9 bits
+    """
+    other: PBits = dataclasses.field(default_factory=PBits)
+    group: PBits = dataclasses.field(default_factory=PBits)
+    owner: PBits = dataclasses.field(default_factory=PBits)
+
+    def get_pack(self) -> bytes:
+        """
+        byte order: little endian
+        """
+        return struct.pack("<H", self.get_int())
+
+    def get_int(self) -> int:
+        return (
+            self.other.get_int() << 6 |
+            self.group.get_int() << 3 |
+            self.owner.get_int()
+        )
+
+    @classmethod
+    def create_from_raw(self, value: bytes) -> "ModeBits":
+        """
+        Length 2 bytes, little endian
+        """
+        if len(value) != 2:
+            raise ValueError("Wrong length")
+        value_int = struct.unpack("<H", value)[0]
+        return ModeBits(
+            other=PBits.create_from_raw(value_int >> 6),
+            group=PBits.create_from_raw(value_int >> 3),
+            owner=PBits.create_from_raw(value_int),
+        )
+
 # Models
 # ======
 
 
-@dataclass
+@dataclasses.dataclass
 class SectorStatus:
     """
     Sector status bit mask
@@ -606,8 +682,29 @@ class SmartFSDirEntryType(int, Enum):
 
 class SmartFSDirEntryFlags(BaseModel):
     """
+    Length: 2 bytes
+
+    15 14 13 12 11 10 09 08 07 06 05 04 03 02 01 00
+     │  │  │  │  │  │  │  │                       │
+     │  │  │  │  │  │  │  │                       └──
+     │  │  │  │  │  │  │  └────────────────────────── Permission bits
+     │  │  │  │  │  │  │
+     │  │  │  │  │  │  └───────────────────────────── Reserved
+     │  │  │  │  │  └──────────────────────────────── Reserved
+     │  │  │  │  └─────────────────────────────────── Reserved
+     │  │  │  │
+     │  │  │  └────────────────────────────────────── Deleting flag
+     │  │  │
+     │  │  └───────────────────────────────────────── Type flag
+     │  │
+     │  └──────────────────────────────────────────── Active flag
+     │
+     └─────────────────────────────────────────────── Empty flag
+
+
     /* Directory entry flag definitions */
-    0 - set; 1 - unset
+    For flags: 0 - set; 1 - unset.
+    For permisson bit: 1 set; 0 unset.
 
     #define SMARTFS_DIRENT_EMPTY      0x8000  /* Set to non-erase state when entry used */
     #define SMARTFS_DIRENT_ACTIVE     0x4000  /* Set to erase state when entry is active */
@@ -629,8 +726,15 @@ class SmartFSDirEntryFlags(BaseModel):
         description="Indicates the type of entry (file - 0/dir - 1)")
     deleting: int = Field(
         1, description="Directory entry is being deleted")
-    mode: int = Field(
-        0x01FF, description="Mode the file was created with")
+    reserved: int = Field(0b111, description="Reserved bits")
+    mode: ModeBits = Field(
+        ModeBits(
+            other=PBits(r=1, w=0, x=0),
+            group=PBits(r=1, w=0, x=0),
+            owner=PBits(r=1, w=0, x=0),
+        ),
+        description="Mode the file was created with"
+    )
 
     def get_pack(self) -> bytes:
         """
@@ -642,21 +746,24 @@ class SmartFSDirEntryFlags(BaseModel):
             self.active << 14 |
             self.type.value << 13 |
             self.deleting << 12 |
-            0b111 << 9 |
-            self.mode
+            self.reserved << 9 |
+            self.mode.get_int()
         )
 
     @classmethod
     def create_from_raw(self, values: bytes) -> "SmartFSDirEntryFlags":
         """
+        Lenght: 2 bytes
         Order bytes: little endian (LSB first)
         """
+        if len(values) != 2:
+            raise ValueError("Wrong length")
         return SmartFSDirEntryFlags(
             empty=(values[1] & 0x80) >> 7,
             active=(values[1] & 0x40) >> 6,
             type=SmartFSDirEntryType((values[1] & 0x20) >> 5),
             deleting=(values[1] & 0x10) >> 4,
-            mode=(values[0] + (values[1] << 8)) & 0x01FF
+            mode=ModeBits.create_from_raw(values[0:12]),
         )
 
     @property

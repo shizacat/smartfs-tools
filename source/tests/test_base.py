@@ -85,50 +85,51 @@ class TestBase(unittest.TestCase):
         self.assertEqual(r.used, 5)
 
     def test_SmartFSDirEntryFlags(self):
-        # not set all
+        # not set default
         r = base.SmartFSDirEntryFlags()
-        self.assertEqual(r.get_pack(), b'\xff\xff')
+        print(r.mode.get_int())
+        self.assertEqual(r.get_pack(), b'\x24\xff')
 
         # set empty
         r = base.SmartFSDirEntryFlags()
         r.empty = 0
-        self.assertEqual(r.get_pack(), b'\xff\x7f')
+        self.assertEqual(r.get_pack(), b'\x24\x7f')
 
         # set active
         r = base.SmartFSDirEntryFlags()
         r.active = 0
-        self.assertEqual(r.get_pack(), b'\xff\xbf')
+        self.assertEqual(r.get_pack(), b'\x24\xbf')
 
         # set type
         r = base.SmartFSDirEntryFlags()
         r.type = base.SmartFSDirEntryType.file
-        self.assertEqual(r.get_pack(), b'\xff\xdf')
+        self.assertEqual(r.get_pack(), b'\x24\xdf')
 
         # set deleting
         r = base.SmartFSDirEntryFlags()
         r.deleting = 0
-        self.assertEqual(r.get_pack(), b'\xff\xef')
+        self.assertEqual(r.get_pack(), b'\x24\xef')
 
     def test_SmartFSDirEntryFlags_from_raw(self):
         # set empty
-        r = base.SmartFSDirEntryFlags.create_from_raw(b"\xff\x7f")
+        r = base.SmartFSDirEntryFlags.create_from_raw(b"\xFF\x7f")
         self.assertEqual(r.empty, 0)
 
         # set active
-        r = base.SmartFSDirEntryFlags.create_from_raw(b"\xff\xbf")
+        r = base.SmartFSDirEntryFlags.create_from_raw(b"\xFF\xbf")
         self.assertEqual(r.active, 0)
 
         # set type file
-        r = base.SmartFSDirEntryFlags.create_from_raw(b"\xff\xdf")
+        r = base.SmartFSDirEntryFlags.create_from_raw(b"\xFF\xdf")
         self.assertEqual(r.type, base.SmartFSDirEntryType.file)
 
         # set deleting
-        r = base.SmartFSDirEntryFlags.create_from_raw(b"\xff\xef")
+        r = base.SmartFSDirEntryFlags.create_from_raw(b"\xFF\xEF")
         self.assertEqual(r.deleting, 0)
 
-        # set mode
-        r = base.SmartFSDirEntryFlags.create_from_raw(b"\x14\xFF")
-        self.assertEqual(r.mode, 0x114)
+        # set mode, flag value - 1111 1111 0010 0100
+        r = base.SmartFSDirEntryFlags.create_from_raw(b"\x24\xFF")
+        self.assertEqual(r.mode.get_pack(), b"\x24\x01")
 
     def test_SmartFSEntryHeader(self):
         r = base.SmartFSEntryHeader(
@@ -145,3 +146,51 @@ class TestBase(unittest.TestCase):
         )
         self.assertEqual(r.first_sector, 10)
         self.assertEqual(r.name, "check")
+
+    def test_pbits(self):
+        # default
+        r = base.PBits()
+        self.assertEqual(r.get_int(), 0)
+        self.assertEqual(r.get_pack(), b'\x00')
+        # set read, 100
+        r = base.PBits()
+        r.r = 1
+        self.assertEqual(r.get_int(), 4)
+        self.assertEqual(r.get_pack(), b'\x04')
+        # set write, 010
+        r = base.PBits()
+        r.w = 1
+        self.assertEqual(r.get_int(), 2)
+        self.assertEqual(r.get_pack(), b'\x02')
+        # set execute, 001
+        r = base.PBits()
+        r.x = 1
+        self.assertEqual(r.get_int(), 1)
+        self.assertEqual(r.get_pack(), b'\x01')
+        # set all
+        r = base.PBits()
+        r.r = 1
+        r.w = 1
+        r.x = 1
+        self.assertEqual(r.get_int(), 7)
+        self.assertEqual(r.get_pack(), b'\x07')
+
+    def test_ModeBits(self):
+        # default
+        r = base.ModeBits()
+        self.assertEqual(r.get_pack(), b'\x00\x00')
+        # set other
+        r = base.ModeBits()
+        r.other.r = 1
+        self.assertEqual(r.get_int(), 0b000100000000)
+        self.assertEqual(r.get_pack(), b'\x00\x01')
+        # set group
+        r = base.ModeBits()
+        r.group.r = 1
+        self.assertEqual(r.get_int(), 0b000000100000)
+        self.assertEqual(r.get_pack(), b'\x20\x00')
+        # set owner
+        r = base.ModeBits()
+        r.owner.r = 1
+        self.assertEqual(r.get_int(), 0b000000000100)
+        self.assertEqual(r.get_pack(), b'\x04\x00')
