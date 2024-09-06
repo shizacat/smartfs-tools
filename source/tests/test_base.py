@@ -24,6 +24,31 @@ class TestBase(unittest.TestCase):
         self.assertEqual(obj[:4], b'\x10\x00\x23\x0a')
         self.assertEqual(obj[4], 0b01000101)
 
+    def test_SectorSize_create_from_int(self):
+        """
+        Create from int
+        """
+        for bit, result in [
+            (256, base.SectorSize.b256),
+            (512, base.SectorSize.b512),
+            (1024, base.SectorSize.b1024),
+            (2048, base.SectorSize.b2048),
+            (4096, base.SectorSize.b4096),
+            (8192, base.SectorSize.b8192),
+            (16384, base.SectorSize.b16384),
+            (32768, base.SectorSize.b32768),
+        ]:
+            obj = base.SectorSize.create_from_int(bit)
+            self.assertEqual(obj, result)
+
+        # Check invalid value
+        with self.assertRaises(ValueError):
+            base.SectorSize.create_from_int(123456)
+
+    def test_SectorSize_to_list(self):
+        r = base.SectorSize.to_list()
+        self.assertIsInstance(r, list)
+
     def test_SectorHeader_create_from_raw(self):
         h = base.SectorHeader.create_from_raw(b'\x10\x00\x23\x0a\x45')
         self.assertIsInstance(h, base.SectorHeaderV1)
@@ -175,6 +200,17 @@ class TestBase(unittest.TestCase):
         self.assertEqual(r.get_int(), 7)
         self.assertEqual(r.get_pack(), b'\x07')
 
+        # str present
+        r = base.PBits()
+        print(r)
+
+        # wrong
+        with self.assertRaises(ValueError):
+            r = base.PBits.create_from_raw(b"ab")
+
+        # from bytes
+        r = base.PBits.create_from_raw(b"\x07")
+
     def test_ModeBits(self):
         # default
         r = base.ModeBits()
@@ -194,3 +230,11 @@ class TestBase(unittest.TestCase):
         r.owner.r = 1
         self.assertEqual(r.get_int(), 0b000000000100)
         self.assertEqual(r.get_pack(), b'\x04\x00')
+
+        # wrong, from bytes, wrong length
+        with self.assertRaises(ValueError):
+            r = base.ModeBits.create_from_raw(b"\x00")
+
+    def test_CRCValue(self):
+        r = base.CRCValue.to_list()
+        self.assertIsInstance(r, list)
