@@ -17,6 +17,8 @@ class Args(TypedDict):
     smart_version: int
     smart_crc: int
     smart_max_len_filename: int
+    dir_mode: str
+    file_mode: str
 
 
 def arguments(args_list: Optional[List[str]] = None) -> argparse.Namespace:
@@ -76,6 +78,20 @@ def arguments(args_list: Optional[List[str]] = None) -> argparse.Namespace:
         default=16,
         help="Max length of filename in smartFS",
     )
+
+    parser_permissions = parser.add_argument_group("permissions")
+    parser_permissions.add_argument(
+        "--dir-mode",
+        type=str,
+        help="Mode of directory, default '%(default)s'",
+        default="777"
+    )
+    parser_permissions.add_argument(
+        "--file-mode",
+        type=str,
+        help="Mode of file, default '%(default)s'",
+        default="666"
+    )
     return parser.parse_args(args_list)
 
 
@@ -111,8 +127,35 @@ def walk_dir_find_all_dir(path: Path) -> List[str]:
     return result[1:]
 
 
+def check_mode(mode: str, help: str):
+    """
+    Raises:
+        ValueError: if mode is not 3 symbols or not integer
+    """
+    if len(mode) != 3:
+        raise ValueError(f"{help} mode must be 3 symbols")
+    try:
+        int(mode)
+    except ValueError:
+        raise ValueError("Mode must be integer")
+
+
 def main(args_list: Optional[List[str]] = None):
     args: Args = arguments(args_list)
+
+    # Convert mode to object
+    check_mode(args.dir_mode, "Directory")
+    check_mode(args.file_mode, "File")
+    dir_mode = base.ModeBits(
+        other=int(args.dir_mode[0]),
+        group=int(args.dir_mode[1]),
+        owner=int(args.dir_mode[2]),
+    )
+    file_mode = base.ModeBits(
+        other=int(args.file_mode[0]),
+        group=int(args.file_mode[1]),
+        owner=int(args.file_mode[2]),
+    )
 
     smartfs = SmartHigh(
         storage=bytearray(args.storage_size),
@@ -131,13 +174,14 @@ def main(args_list: Optional[List[str]] = None):
         raise ValueError("Base dir not exists")
 
     for item in walk_dir_find_all_dir(args.base_dir):
-        smartfs.cmd_mkdir("/" + item)
+        smartfs.cmd_mkdir(path="/" + item, mode=dir_mode)
 
     for item in walk_dir_find_files(args.base_dir):
         with item.open("rb") as f:
             smartfs.cmd_file_create_write(
-                "/" + str(item.relative_to(args.base_dir)),
-                f.read()
+                path="/" + str(item.relative_to(args.base_dir)),
+                body=f.read(),
+                mode=file_mode,
             )
 
     with args.out.open("wb") as f:
