@@ -1,15 +1,21 @@
 ## [Unreleased]
 
+## [0.3.1] - 2024-09-07
+
 ### Fixed
 - Fix, crete mode ModeBits from str of int, and move it in class
 
+
 ## [0.3.0] - 2024-09-06
 
-- Fix: walk_dir_find_all_dir alogrithm update
-- Fix: _create_entry, _find_entry - walk through sectors
+### Added
 - Future: add support permissions bit in classes
 - Add: mkdir, cmd_file_create_write add argument 'mode'
 - Future: add config permissoin mode for script
+
+### Fixed
+- Fix: walk_dir_find_all_dir alogrithm update
+- Fix: _create_entry, _find_entry - walk through sectors
 
 
 ## [0.2.0] - 2024-08-29
