@@ -143,19 +143,8 @@ def check_mode(mode: str, help: str):
 def main(args_list: Optional[List[str]] = None):
     args: Args = arguments(args_list)
 
-    # Convert mode to object
-    check_mode(args.dir_mode, "Directory")
-    check_mode(args.file_mode, "File")
-    dir_mode = base.ModeBits(
-        other=int(args.dir_mode[0]),
-        group=int(args.dir_mode[1]),
-        owner=int(args.dir_mode[2]),
-    )
-    file_mode = base.ModeBits(
-        other=int(args.file_mode[0]),
-        group=int(args.file_mode[1]),
-        owner=int(args.file_mode[2]),
-    )
+    dir_mode = base.ModeBits.create_from_str(args.dir_mode)
+    file_mode = base.ModeBits.create_from_str(args.file_mode)
 
     smartfs = SmartHigh(
         storage=bytearray(args.storage_size),

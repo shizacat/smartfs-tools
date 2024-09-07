@@ -193,7 +193,7 @@ class ModeBits:
         )
 
     @classmethod
-    def create_from_raw(self, value: bytes) -> "ModeBits":
+    def create_from_raw(cls, value: bytes) -> "ModeBits":
         """
         Length 2 bytes, little endian
         """
@@ -206,9 +206,35 @@ class ModeBits:
             owner=PBits.create_from_raw(value_int),
         )
 
+    @classmethod
+    def create_from_str(cls, value: str) -> "ModeBits":
+        """
+        Create ModeBits from string
+        other group owner
+        666
+        rwx bits
+        """
+        # check length
+        if len(value) != 3:
+            raise ValueError("Wrong length")
+        # check max int value
+        for v in value:
+            try:
+                v = int(v)
+            except ValueError:
+                raise ValueError("Get not int")
+            if v > 7:
+                raise ValueError("Max number is 7")
+
+        return ModeBits(
+            other=PBits.create_from_raw(int(value[0])),
+            group=PBits.create_from_raw(int(value[1])),
+            owner=PBits.create_from_raw(int(value[2])),
+        )
+
+
 # Models
 # ======
-
 
 @dataclasses.dataclass
 class SectorStatus:

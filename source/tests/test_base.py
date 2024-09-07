@@ -235,6 +235,22 @@ class TestBase(unittest.TestCase):
         with self.assertRaises(ValueError):
             r = base.ModeBits.create_from_raw(b"\x00")
 
+        # create from str
+        r = base.ModeBits.create_from_str("456")
+        self.assertEqual(r.other, base.PBits(r=1, w=0, x=0))
+        self.assertEqual(r.group, base.PBits(r=1, w=0, x=1))
+        self.assertEqual(r.owner, base.PBits(r=1, w=1, x=0))
+
+        # create from str, wrong length
+        with self.assertRaises(ValueError):
+            r = base.ModeBits.create_from_str("4567")
+
+        # create from str, wrong value
+        with self.assertRaises(ValueError):
+            r = base.ModeBits.create_from_str("568")
+        with self.assertRaises(ValueError):
+            r = base.ModeBits.create_from_str("abc")
+
     def test_CRCValue(self):
         r = base.CRCValue.to_list()
         self.assertIsInstance(r, list)
