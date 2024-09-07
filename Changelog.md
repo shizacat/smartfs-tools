@@ -1,5 +1,8 @@
 ## [Unreleased]
 
+### Fixed
+- Fix, crete mode ModeBits from str of int, and move it in class
+
 ## [0.3.0] - 2024-09-06
 
 - Fix: walk_dir_find_all_dir alogrithm update
