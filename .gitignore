@@ -9,3 +9,6 @@ dist/*
 # Runtime
 test.bin
 notes.md
+
+# IDE
+.vscode/settings.json
