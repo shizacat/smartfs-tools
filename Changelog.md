@@ -1,5 +1,12 @@
 ## [Unreleased]
 
+## [0.4.0] - 2024-10-14
+
+### Added
+
+- Add, option '--smart-number-root-dir', the count of root directory.
+
+
 ## [0.3.1] - 2024-09-07
 
 ### Fixed

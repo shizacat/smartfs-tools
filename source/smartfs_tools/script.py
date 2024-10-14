@@ -17,6 +17,7 @@ class Args(TypedDict):
     smart_version: int
     smart_crc: int
     smart_max_len_filename: int
+    smart_number_root_dir: int
     dir_mode: str
     file_mode: str
 
@@ -77,6 +78,12 @@ def arguments(args_list: Optional[List[str]] = None) -> argparse.Namespace:
         type=int,
         default=16,
         help="Max length of filename in smartFS",
+    )
+    parser_smart.add_argument(
+        "--smart-number-root-dir",
+        type=int,
+        default=0,
+        help="The count of root directory"
     )
 
     parser_permissions = parser.add_argument_group("permissions")
@@ -156,6 +163,7 @@ def main(args_list: Optional[List[str]] = None):
             version=base.Version(args.smart_version),
             crc=base.CRCValue(args.smart_crc),
             max_len_filename=args.smart_max_len_filename,
+            number_root_dir=args.smart_number_root_dir,
         )
     )
 
