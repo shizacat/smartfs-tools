@@ -167,7 +167,7 @@ class TestBase(unittest.TestCase):
 
     def test_test_SmartFSEntryHeader_from_raw(self):
         r = base.SmartFSEntryHeader.create_from_raw(
-            b'\xff\xff\n\x00l\xda\xc8fcheck\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
+            b'\xff\xff\n\x00l\xda\xc8fcheck\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'  # noqa: E501
         )
         self.assertEqual(r.first_sector, 10)
         self.assertEqual(r.name, "check")
