@@ -19,8 +19,8 @@ from .base import (
 
 class MTDBlockLayer:
     """
-    Класс для работы с виртуальным устройством с файловой
-    системой SmartFS.
+    The class for work with the virtual device with the file
+    system SmartFS.
 
     This layer manages all low-level FLASH access operations
     including:
@@ -40,8 +40,8 @@ class MTDBlockLayer:
     ):
         """
         Args:
-            device_size: int - в байтах, размер устройсва
-            erase_block_size - в байтах, размер erase block,
+            device_size: int - size of the device in bytes
+            erase_block_size - size of rhe erase block in bytes
                 esp32s3 spi flash - 4096
             number_root_dir - Record the number of root directory entries
                 we have, if 1 - without multi directory
@@ -249,10 +249,10 @@ class MTDBlockLayer:
         sequence_number: int = 0,
     ) -> Sector:
         """
-        Создает новый физический сектор.
-          - Записывает Sector Header в сектор
+        Create new physical sector.
+          - write Sectorr Header in sector
 
-        Не проверяет существование старого
+        Doesn't check if the old sector is exist
         """
         # Get border
         b_start = phy_sector_number * self._sector_size_byte
@@ -281,7 +281,7 @@ class MTDBlockLayer:
 
     def _phy_sector_get(self, phy_sector_number: int) -> Sector:
         """
-        Только получает, читает сектор
+        Only get, it reads the sector
         """
         # Checks
         if (
@@ -300,7 +300,8 @@ class MTDBlockLayer:
 
     def _log_sector_get(self, log_sector: int) -> Sector:
         """
-        Возвращает физический сектор соответсвующий логическому
+        Return:
+            the physical sector corresponding to the logical one
         """
         return self._phy_sector_get(self._smart_struct.smap[log_sector])
 
@@ -328,5 +329,8 @@ class MTDBlockLayer:
 
     @property
     def dump(self) -> bytes:
-        """Возвращает содержимое виртуального диска"""
+        """
+        Return:
+            the content of the virtual disk
+        """
         return bytes(self._storage)

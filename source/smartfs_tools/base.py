@@ -21,11 +21,11 @@ SCTN_ROOT_DIR_SECTOR: int = 3
 # SMART_FIRST_ALLOC_SECTOR
 SCTN_FIRST_ALLOC_SECTOR: int = 12
 
-# Максимальный номер логического сектора, он же последний
-# он же зарезервирован
+# The maximum logical sector number, also the last one.
+# also the reserved one.
 LS_HIGHT_NUMBER: int = 0xffff
 
-# Физический сектор не выделен
+# The physical sector is not allocated.
 PS_NOT_ALLOCATED: int = 0xffff
 
 
@@ -327,7 +327,7 @@ class SectorHeader:
     @classmethod
     def create_from_raw(cls, value: bytes) -> "SectorHeader":
         """
-        Создает заголовок из строки байтов
+        Create the header from the raw bytes
         """
         if len(value) != 5:
             raise ValueError("Invalid sector header size")
@@ -452,7 +452,7 @@ class ChainHeader(BaseModel):
     @classmethod
     def create_from_raw(cls, value: bytes) -> "ChainHeader":
         """
-        Создает заголовок из строки байтов
+        Createe the header from the raw bytes
         """
         if len(value) != cls.get_size():
             raise ValueError("Invalid chain header size")
@@ -465,7 +465,7 @@ class ChainHeader(BaseModel):
 
 class Sector:
     """
-    Сектор
+    The sector
     """
 
     def __init__(
@@ -477,8 +477,8 @@ class Sector:
     ):
         """
         Args:
-            is_new - будет заполнено новыми структурами
-                иначе будет вычитывать и парсить
+            is_new - it will be filled with new values,
+                else it will be read from the storage and parsed
         """
         self._storage = storage
         self._fill_value = fill_value
@@ -495,11 +495,11 @@ class Sector:
 
     def set_bytes(self, pfrom: int, value: bytes):
         """
-        Записывает в нужное место данные.
-        Сразу рассчитывается crc если это нужно
+        It will be writen data in right place on the storage
+        And recalculate crc if it is needed
 
         Args:
-            pfrom - позиция считается после заголовка
+            pfrom - the position starts after the header
         """
         start_position = self._header.size + pfrom
         end_position = self._header.size + pfrom + len(value)
@@ -515,7 +515,7 @@ class Sector:
 
     def _fill(self):
         """
-        Заполняет пустое место в секторе
+        Fill empty space in the sector
         """
         self._storage[0:1] = b"a"
         self._storage[self._header.size:] = self._fill_value * (
@@ -552,16 +552,17 @@ class Sector:
 
     def get_size(self) -> int:
         """
-        Возвращает размер доступного места в секторе
+        Return:
+            The size of available space in the sector
         """
         return len(self._storage) - self._header.size
 
     def read_object(self, class_name, offset: int = 0, size: int = 0):
         """
-        Читает объект по заданному адрсу
+        Reads on object at a given address
 
         Args:
-            offset, смещенеи относительно SH
+            offset, relative to SH
         """
         b_start = self._header.size + offset
         b_end = b_start + size
@@ -574,10 +575,11 @@ class Sector:
 
     def borders_is_big(self, offset: int, size: int) -> bool:
         """
-        Проверяет, что начало и конец данных не выходят за границы сектора
+        Checks that the start and end of the data do not exceed
+        the sector boundaries
 
         Return
-            True - если выходит за границы
+            True - if the data is outside the sector
         """
         b_start = self._header.size + offset
         b_end = b_start + size
@@ -602,19 +604,19 @@ class Sector:
 
 class SmartFSConfig(BaseModel):
     """
-    Настройки виртуального устрояйства со SmartFS
+    The configuration of the virtual device with SmartFS
     """
     sector_size: SectorSize = Field(
-        SectorSize.b512, description="Размер сектрота")
-    version: Version = Field(Version.v1, description="Версия SmartFS")
+        SectorSize.b512, description="The size of sector")
+    version: Version = Field(Version.v1, description="The version of SmartFS")
     crc: CRCValue = Field(
         CRCValue.crc_disable, description="CRC alhorithm, or disable")
     max_len_filename: int = Field(
-        16, description="Максимальная длинна имени файла")
+        16, description="The maximum length name of file")
     number_root_dir: int = Field(
         0,
         description=(
-            "Количество корневых директорий, "
+            "The number of root directories, "
             "if 0 - only one root directory"
         )
     )
@@ -622,7 +624,7 @@ class SmartFSConfig(BaseModel):
 
 class SmartStruct(BaseModel):
     """
-    Расчетные данные для работы SmartFS
+    The calculated data for working with SmartFS
 
     uint16_t              neraseblocks;     /* Number of erase blocks or sub-sectors */
     uint16_t              lastallocblock;   /* Last  block we allocated a sector from */

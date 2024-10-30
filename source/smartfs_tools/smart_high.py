@@ -11,8 +11,9 @@ from .smart import MTDBlockLayer
 
 class SmartHigh:
     """
-    Высокоуровневый класс для работы с виртуальным устроством
-    TODO: может переименовать в SmartVDevice, а может это FS Layer
+    The class (high level) is responsible for working with a virtual device
+
+    TODO: may be renamed to SmartVDevice, maybe this is FS Layer
     """
 
     def __init__(
@@ -24,11 +25,10 @@ class SmartHigh:
     ):
         """
         Args:
-            erase_block_size - в байтах, размер erase block
-            storage - байтовый массив для данных, может быть как пустой
-                так и с данными
-            formated - форматировать раздел,
-                если нет, то smart_config будет проигнорирован
+            erase_block_size - in bytes, erase block size
+            storage - the array of bytes for data, may be empty or with data
+            formated - flag, if True, then the storage will be formatted
+                else smart_config will be ignored
         """
         self._mtd_block_layer = MTDBlockLayer(
             smartfs_config=smartfs_config,
@@ -38,7 +38,10 @@ class SmartHigh:
         )
 
     def cmd_ls(self, base_dir: str = "/") -> list:
-        """Возвращает список файлов и папок в указанной директории"""
+        """
+        Return:
+            list of files and directories in selected directory
+        """
         raise NotImplementedError()
 
     def cmd_file_create_write(
@@ -51,12 +54,12 @@ class SmartHigh:
             owner=base.PBits(r=1, w=1, x=0),
         ),
     ):
-        """Создает новый файл с указанным именем и содержимым
-        Если файл существует перезаписывает
+        """Created a new file with the specified name and content
+        If the file exists, it will be overwritten
         name: smartfs_open; smartfs_write
 
         Args:
-            path - полный путь к файлу включая имя файла
+            path - full path to the file, include name of file
             mode - File mode bits (rwx)
         """
         if not path.startswith("/"):
@@ -75,7 +78,7 @@ class SmartHigh:
         )
 
         # fill content
-        # TODO: Fix размер заголовка сектора нужно получать из объекта
+        # TODO: Fix size of sector header need to get from object
         empty_size_in_sector = (
             self._mtd_block_layer._sector_size_byte -
             5 -  # base.SectorHeader.size -
@@ -102,7 +105,7 @@ class SmartHigh:
 
                 # Set sector
                 sector = self._mtd_block_layer._log_sector_get(sector_number)
-                # TODO: задать тип сектора в CH
+                # TODO: set sector type in CH
 
             # Write data
             data = body[i:i + empty_size_in_sector]
@@ -116,10 +119,10 @@ class SmartHigh:
             sector.set_bytes(pfrom=0, value=chain_h.get_pack())
 
     def cmd_file_read(self, path: str) -> bytes:
-        """Читает содержимое файла
+        """Reads the contents of the file
 
         Args:
-            path - полный путь к файлу включая имя файла
+            path - full path to the file, include name of file
         """
         raise NotImplementedError()
 
@@ -137,7 +140,7 @@ class SmartHigh:
         name: smartfs_mkdir
 
         Args
-            path - полный путь к директории включая имя директории
+            path - full path to the directory, include name of directory
         """
         if not path.startswith("/"):
             raise ValueError("Path must be absolute")
@@ -156,21 +159,25 @@ class SmartHigh:
             mode=mode)
 
     def dump(self) -> bytes:
-        """Возвращает содержимое виртуального диска"""
+        """
+        Return:
+            content of the virtual disk
+        """
         return self._mtd_block_layer.dump
 
     @staticmethod
     def read_dump(dump: bytes) -> "SmartHigh":
-        """Создает объект из содержимого виртуального диска"""
+        """Create object from the contents of the virtual disk"""
         raise NotImplementedError()
 
     def _finddirentry(self, path_abs: str) -> base.SmartFSEntry:
         """
         Finds an entry in the filesystem as specified by absolute path.
 
-        TODO: Мои мыслки по объекту Entry
-        dir_sector - сектор в котором находиться описание директории
-        dir_offset - смещеение к объекту EntryHeader этой директории в секторе
+        TODO: My thinks about the object Entry
+        dir_sector - the sector in which the description of directory is located
+        dir_offset - offset to the object EntryHeader this directory
+            inside the sector
         """
         if not path_abs.startswith("/"):
             raise ValueError("Path must be absolute")
