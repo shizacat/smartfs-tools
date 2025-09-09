@@ -5,6 +5,7 @@ source/check.py
 .coverage
 coverage.xml
 dist/*
+uv.lock
 
 # Runtime
 test.bin
