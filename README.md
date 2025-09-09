@@ -38,3 +38,15 @@ Run script (smartfs_mkdump):
 ```bash
 python -m smartfs_tools.script
 ```
+
+## Tests
+
+You must have [uv](https://docs.astral.sh/uv/) installed.
+
+```bash
+uv venv
+uv sync
+uv run pytest
+# with coverage
+uv run pytest --cov source
+```
