@@ -9,7 +9,7 @@ from smartfs_tools import SmartHigh, base
 
 
 class Args(TypedDict):
-    base_dir: str
+    base_dir: Path
     out: Path
     storage_size: int
     smart_erase_block_size: int
@@ -148,7 +148,7 @@ def check_mode(mode: str, help: str):
 
 
 def main(args_list: Optional[List[str]] = None):
-    args: Args = arguments(args_list)
+    args: Args = arguments(args_list)  # type: Args
 
     dir_mode = base.ModeBits.create_from_str(args.dir_mode)
     file_mode = base.ModeBits.create_from_str(args.file_mode)
