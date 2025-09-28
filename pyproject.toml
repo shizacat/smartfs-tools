@@ -62,4 +62,5 @@ omit = ["source/tests/*"]
 dev = [
     "pytest>=8.3.5",
     "pytest-coverage>=0.0",
+    "ruff>=0.13.2",
 ]

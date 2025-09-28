@@ -1,5 +1,10 @@
 ## [Unreleased]
 
+### Added
+- Add more tests for script.py
+- Add to script.py the mode_check_with_help function
+
+
 ## [0.4.0] - 2024-10-14
 
 ### Added
