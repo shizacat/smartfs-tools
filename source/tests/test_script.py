@@ -105,3 +105,28 @@ def test_walk_dir_find_all_dir_01(base_dir_with_files: Path):
     """
     r = script.walk_dir_find_all_dir(base_dir_with_files)
     assert r == ["dir1", "dir1/dir2"]
+
+
+def test_main(base_dir_with_files: Path):
+    """
+    Check correctl run function main
+    """
+    with TemporaryDirectory() as tmp_dir:
+        tmp_dir_path = Path(tmp_dir)
+        out_file = tmp_dir_path.joinpath("out.bin")
+        try:
+            script.main(
+                [
+                    "--base-dir",
+                    str(base_dir_with_files),
+                    "--out",
+                    str(out_file),
+                    "--storage-size",
+                    "1048576",
+                ]
+            )
+            assert out_file.exists()
+            assert out_file.stat().st_size == 1048576
+        finally:
+            if out_file.exists():
+                out_file.unlink()

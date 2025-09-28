@@ -172,7 +172,7 @@ def walk_dir_find_all_dir(path: Path) -> List[str]:
 
 
 def main(args_list: Optional[List[str]] = None):
-    args: Args = arguments(args_list)  # type: Args
+    args: Args = arguments(args_list)
 
     dir_mode = base.ModeBits.create_from_str(args.dir_mode)
     file_mode = base.ModeBits.create_from_str(args.file_mode)
