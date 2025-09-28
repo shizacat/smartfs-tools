@@ -3,7 +3,7 @@
 import argparse
 from collections import deque
 from pathlib import Path
-from typing import Generator, List, Optional, TypedDict
+from typing import Callable, Generator, List, Optional, TypedDict
 
 from smartfs_tools import SmartHigh, base
 
@@ -20,6 +20,37 @@ class Args(TypedDict):
     smart_number_root_dir: int
     dir_mode: str
     file_mode: str
+
+
+def mode_check_with_help(help: str) -> Callable[[str], str]:
+    """
+    Args:
+        help: str - help message, example "file" or "dir"
+
+    Return:
+        Callable for argparse
+    """
+    def mode_check(mode: str) -> int:
+        """
+        Check mode string
+
+        Raises:
+            ValueError: if mode is not 3 symbols or not integer
+
+        Return:
+            The mode as integer
+        """
+        if len(mode) != 3:
+            raise ValueError(f"The {help} mode must be 3 symbols")
+        try:
+            for v in mode:
+                if int(v) < 0 or int(v) > 7:
+                    raise ValueError(f"The {help} mode must be less than 777")
+        except ValueError:
+            raise ValueError("The {help} mode must be integer")
+        return mode
+
+    return mode_check
 
 
 def arguments(args_list: Optional[List[str]] = None) -> argparse.Namespace:
@@ -89,13 +120,13 @@ def arguments(args_list: Optional[List[str]] = None) -> argparse.Namespace:
     parser_permissions = parser.add_argument_group("permissions")
     parser_permissions.add_argument(
         "--dir-mode",
-        type=str,
+        type=mode_check_with_help("dir"),
         help="Mode of directory, default '%(default)s'",
         default="777"
     )
     parser_permissions.add_argument(
         "--file-mode",
-        type=str,
+        type=mode_check_with_help("file"),
         help="Mode of file, default '%(default)s'",
         default="666"
     )
@@ -103,6 +134,12 @@ def arguments(args_list: Optional[List[str]] = None) -> argparse.Namespace:
 
 
 def walk_dir_find_files(path: Path) -> Generator[Path, None, None]:
+    """
+    Wolk directory and find all files (only files), recursive
+
+    Return
+        Generator of Path
+    """
     for p in path.glob("**/*"):
         if p.is_file():
             yield p
@@ -132,19 +169,6 @@ def walk_dir_find_all_dir(path: Path) -> List[str]:
 
     # Remove root dir
     return result[1:]
-
-
-def check_mode(mode: str, help: str):
-    """
-    Raises:
-        ValueError: if mode is not 3 symbols or not integer
-    """
-    if len(mode) != 3:
-        raise ValueError(f"{help} mode must be 3 symbols")
-    try:
-        int(mode)
-    except ValueError:
-        raise ValueError("Mode must be integer")
 
 
 def main(args_list: Optional[List[str]] = None):
