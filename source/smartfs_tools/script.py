@@ -3,7 +3,7 @@
 import argparse
 from collections import deque
 from pathlib import Path
-from typing import List, Optional, TypedDict
+from typing import Generator, List, Optional, TypedDict
 
 from smartfs_tools import SmartHigh, base
 
@@ -102,7 +102,7 @@ def arguments(args_list: Optional[List[str]] = None) -> argparse.Namespace:
     return parser.parse_args(args_list)
 
 
-def walk_dir_find_files(path: Path):
+def walk_dir_find_files(path: Path) -> Generator[Path, None, None]:
     for p in path.glob("**/*"):
         if p.is_file():
             yield p
