@@ -6,6 +6,7 @@ Python library and utilities for creating a dump of SmartsFS from a directory. T
 
 SmartFS is a file system usage in NuttX. SmartFS stands for Sector Mapped Allocation for Really Tiny (SMART) flash.
 
+
 # Links
 
 - [SmartFS Internals](https://cwiki.apache.org/confluence/display/NUTTX/SmartFS+Internals)
